@@ -65,7 +65,52 @@ a verdict. Exit code is `0` for `AUTHENTIC`, `1` otherwise.
   `NOT DETERMINED` — never a false `OK` — and the verdict can never be
   `AUTHENTIC`. This is what keeps verification usable fully offline: once you
   have a local copy of the transparency directory, no network call is ever
-  made by `check`.
+  made by `check` **unless you explicitly pass `--check-bitcoin`** (below).
 - `--json` — machine-readable report instead of the human-readable one.
+
+### Timestamp: `bound (offline)` vs. `anchored (chain-confirmed)`
+
+By default — **and this is the default that matters, offline, no flags
+needed** — `check` reports:
+
+```
+Timestamp: bound (offline) — Proof is well-formed and binds exactly this
+package's content_hash (offline check). Timestamp not chain-confirmed;
+run with --check-bitcoin <esplora-url> to confirm.
+...
+Verdict: AUTHENTIC
+Note: timestamp not chain-confirmed; run with --check-bitcoin <esplora-url> to confirm.
+```
+
+This is a real, meaningful, fully offline check: it proves the `.ots` proof
+in the package genuinely targets *this* package's `content_hash` (catching a
+proof reused or swapped from a different package) and is structurally
+well-formed. It does **not** prove the underlying Bitcoin attestation is
+real — that needs an actual query against the chain, which `check` never
+does unless you ask it to.
+
+```
+peaceos-verify check ./caso-x.vep --transparency ./peaceos-transparency \
+  --check-bitcoin https://your-own-node-or-explorer.example/api
+```
+
+- `--check-bitcoin <esplora-url>` is **opt-in only**. Omit it and `check`'s
+  behavior is byte-for-byte identical to not having the flag at all — zero
+  network requests, the sacred default. Pass it and `check` queries **only**
+  the endpoint you gave it (an Esplora-compatible REST API — e.g. your own
+  `esplora`/`electrs`/`mempool.space` instance run against your own Bitcoin
+  node, or any explorer you trust) to fetch the block your package's proof
+  claims to be anchored in, and confirms the merkle root matches.
+- On success: `Timestamp: anchored (chain-confirmed) — ...`.
+- If the attestation isn't confirmable yet (still pending in the calendar,
+  not yet mined into a block) or your endpoint can't be reached: `Timestamp:
+  NOT DETERMINED (chain confirmation attempted) — ...`. This is never
+  reported as a package defect (`FAIL`) — an unreachable or slow endpoint
+  says nothing about whether the package itself is genuine — and never
+  silently treated as `OK` either. Because the verdict requires every check
+  to be `OK`, an unresolved `--check-bitcoin` attempt is enough to keep the
+  verdict at `PROBLEMS DETECTED`, even though the offline `bound` check
+  passed: if you explicitly asked for the stronger guarantee, `check` won't
+  quietly hand you the weaker one instead.
 
 See `examples/README.md` for ready-to-run valid and tampered packages.

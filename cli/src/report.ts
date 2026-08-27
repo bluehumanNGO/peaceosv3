@@ -1,4 +1,4 @@
-import type { CheckId, VerifyReport } from '@peaceos/core';
+import type { CheckId, CheckResult, VerifyReport } from '@peaceos/core';
 
 const CHECK_LABELS: Record<CheckId, string> = {
   integrity: 'Integrity',
@@ -15,6 +15,26 @@ const STATUS_LABELS = {
   not_determined: 'NOT DETERMINED',
 } as const;
 
+/**
+ * The timestamp check gets its own label instead of the generic OK/FAIL/NOT
+ * DETERMINED ones (A1): "bound (offline)" vs. "anchored (chain-confirmed)"
+ * are different, non-interchangeable claims, and burying that distinction
+ * inside the message text would be too easy to miss.
+ */
+function formatTimestampLine(check: CheckResult): string {
+  const level = check.details?.level;
+  if (check.status === 'ok' && level === 'anchored') {
+    return `${CHECK_LABELS.timestamp}: anchored (chain-confirmed) — ${check.message}`;
+  }
+  if (check.status === 'ok' && level === 'bound') {
+    return `${CHECK_LABELS.timestamp}: bound (offline) — ${check.message}`;
+  }
+  if (check.status === 'not_determined') {
+    return `${CHECK_LABELS.timestamp}: NOT DETERMINED (chain confirmation attempted) — ${check.message}`;
+  }
+  return `${CHECK_LABELS.timestamp}: ${STATUS_LABELS[check.status]} — ${check.message}`;
+}
+
 export function formatReportHuman(report: VerifyReport): string {
   const lines: string[] = [];
   lines.push(`Package: ${report.packagePath}`);
@@ -28,10 +48,18 @@ export function formatReportHuman(report: VerifyReport): string {
   }
 
   for (const check of report.checks) {
-    lines.push(`${CHECK_LABELS[check.id]}: ${STATUS_LABELS[check.status]} — ${check.message}`);
+    lines.push(
+      check.id === 'timestamp' ? formatTimestampLine(check) : `${CHECK_LABELS[check.id]}: ${STATUS_LABELS[check.status]} — ${check.message}`,
+    );
   }
 
   lines.push('');
   lines.push(`Verdict: ${report.verdict === 'authentic' ? 'AUTHENTIC' : 'PROBLEMS DETECTED'}`);
+
+  const timestampCheck = report.checks.find((check) => check.id === 'timestamp');
+  if (report.verdict === 'authentic' && timestampCheck?.details?.level === 'bound') {
+    lines.push('Note: timestamp not chain-confirmed; run with --check-bitcoin <esplora-url> to confirm.');
+  }
+
   return lines.join('\n');
 }
