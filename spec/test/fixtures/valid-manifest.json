@@ -1,0 +1,60 @@
+{
+  "vep_version": "0.1",
+  "package_id": "sha256:d81cfdb46588bc4e64e7c421f0f2d07ddf4a9d2b5995013896f5bf6825c6466e",
+  "created_at": "2026-03-14T10:22:00Z",
+  "assets": [
+    {
+      "filename": "testimonio_01.mp4",
+      "media_type": "video/mp4",
+      "size_bytes": 48213004,
+      "sha256": "9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e",
+      "captured_at": "2026-03-12T16:41:00Z",
+      "capture_claim": {
+        "app": "peaceos-capture",
+        "device_key_id": "field-01",
+        "location_precision": "redacted"
+      }
+    }
+  ],
+  "custody": [
+    {
+      "event": "captured",
+      "actor": "field-01",
+      "at": "2026-03-12T16:41:00Z",
+      "sig_ref": "signatures/captured-01.sig"
+    },
+    {
+      "event": "imported",
+      "actor": "coord-02",
+      "at": "2026-03-13T09:00:00Z",
+      "sig_ref": "signatures/imported-02.sig"
+    }
+  ],
+  "redactions": [
+    {
+      "field": "witness_identity",
+      "commitment": "bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda",
+      "status": "withheld"
+    }
+  ],
+  "timestamps": [
+    {
+      "type": "opentimestamps",
+      "target": "content_hash",
+      "proof_ref": "timestamps/manifest.ots"
+    }
+  ],
+  "signature": {
+    "alg": "ed25519",
+    "key_id": "field-01",
+    "public_key_ref": "keys/field-01.pub",
+    "public_key_sha256": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd",
+    "sig_ref": "signatures/manifest.sig"
+  },
+  "org": {
+    "org_id": "org-recolectora",
+    "key_id": "org-2026",
+    "transparency_ref": "git:keys@0123456789abcdef0123456789abcdef01234567",
+    "countersig_ref": "signatures/org-countersign.sig"
+  }
+}

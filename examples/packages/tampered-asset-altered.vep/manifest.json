@@ -1,0 +1,33 @@
+{
+  "package_id": "sha256:ba8d55da3b94c00cfa1f496ad0bc96184da7dbac3a18cb5199d7bad2a7f5d43c",
+  "vep_version": "0.1",
+  "created_at": "2026-08-27T18:10:25.688Z",
+  "assets": [
+    {
+      "filename": "testimonio_01.txt",
+      "media_type": "text/plain",
+      "size_bytes": 279,
+      "sha256": "d6a9ac7ef3fa1b8209b7fafd13e17c11a9d3f14e7d364b56a8158a8b5aa67116"
+    }
+  ],
+  "timestamps": [
+    {
+      "type": "opentimestamps",
+      "target": "content_hash",
+      "proof_ref": "timestamps/manifest.ots"
+    }
+  ],
+  "signature": {
+    "alg": "ed25519",
+    "key_id": "field-01",
+    "public_key_ref": "keys/field-01.pub",
+    "public_key_sha256": "f5beb788f3a940c54078e424b57277021c3d35e0f31d7419749c8ba8e320b73d",
+    "sig_ref": "signatures/manifest.sig"
+  },
+  "org": {
+    "org_id": "org-recolectora",
+    "key_id": "org-2026",
+    "transparency_ref": "git:keys@35d61ef76c31af7c1542b005523c7978f3241c0c",
+    "countersig_ref": "signatures/org-countersign.sig"
+  }
+}

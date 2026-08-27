@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/blue-human/peaceos-verify/blob/main/spec/manifest.schema.json",
+  "title": "PeaceOS Verifiable Evidence Package (VEP) manifest",
+  "description": "Schema for manifest.json inside a .vep package. This file is the source of truth for the VEP format, version 0.1.",
+  "$comment": "This schema fixes field SHAPE only. The exact bytes that get hashed, signed and timestamped (content, content_hash, signed_content) are defined in CRYPTO_CONTRACT.md, which this schema's package_id, signature and timestamps[].target fields reference.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["vep_version", "package_id", "created_at", "assets", "timestamps", "signature", "org"],
+  "properties": {
+    "vep_version": {
+      "const": "0.1",
+      "description": "VEP format version."
+    },
+    "package_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Self-verifying identifier: \"sha256:\" + content_hash (see CRYPTO_CONTRACT.md). Excluded from `content`, so it is derived from content_hash rather than included in it — this field only pins the string SHAPE; Verify MUST additionally recompute content_hash and check equality."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the manifest was assembled and signed."
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "custody": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/custodyEvent" },
+      "description": "Chain-of-custody events (captured, imported, exported, ...). Part of the format from v0.1; signature and ordering are verified from M2 onward."
+    },
+    "redactions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/redaction" },
+      "description": "Withheld sensitive fields, represented only as salted commitments, never as plaintext. Part of the format from v0.1; commitment checks land in M2."
+    },
+    "timestamps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/timestampProof" }
+    },
+    "signature": {
+      "$ref": "#/$defs/fieldSignature",
+      "description": "Pseudonymous field signature over the manifest (protects the documenter's identity)."
+    },
+    "org": {
+      "$ref": "#/$defs/orgCountersignature",
+      "description": "Organizational countersignature — the root of trust, anchored in the transparency directory."
+    }
+  },
+  "$defs": {
+    "sha256Hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest."
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "media_type", "size_bytes", "sha256"],
+      "properties": {
+        "filename": { "type": "string", "minLength": 1 },
+        "media_type": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256Hex" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "capture_claim": { "$ref": "#/$defs/captureClaim" }
+      }
+    },
+    "captureClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Unverified metadata claimed by the capturing app/device. Never a source of trust by itself.",
+      "properties": {
+        "app": { "type": "string", "minLength": 1 },
+        "device_key_id": { "type": "string", "minLength": 1 },
+        "location_precision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "custodyEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "actor", "at", "sig_ref"],
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["captured", "imported", "exported", "reviewed"]
+        },
+        "actor": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" },
+        "sig_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "commitment", "status"],
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "commitment": {
+          "$ref": "#/$defs/sha256Hex",
+          "description": "SHA-256(JCS({ salt, field, value })), hex-encoded. The construction (why a JCS object instead of raw concatenation) lives in CRYPTO_CONTRACT.md. The salt is NEVER included in the package — the organization custodies it and reveals it only when disclosing the field."
+        },
+        "status": { "type": "string", "enum": ["withheld", "revealed"] }
+      }
+    },
+    "timestampProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "target", "proof_ref"],
+      "properties": {
+        "type": { "type": "string", "enum": ["opentimestamps", "rfc3161"] },
+        "target": {
+          "type": "string",
+          "enum": ["content_hash"],
+          "description": "The timestamp proof anchors content_hash = SHA-256(JCS(content)); see CRYPTO_CONTRACT.md."
+        },
+        "proof_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fieldSignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alg", "key_id", "public_key_ref", "public_key_sha256", "sig_ref"],
+      "description": "Pseudonymous field signature over content_hash. Signs a hash, not raw content, so the signing payload stays a fixed-size digest regardless of package size.",
+      "properties": {
+        "alg": { "const": "ed25519" },
+        "key_id": { "type": "string", "minLength": 1 },
+        "public_key_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path within the package to the raw 32-byte Ed25519 public key file, e.g. \"keys/field-01.pub\". Lets Verify check the field signature fully offline."
+        },
+        "public_key_sha256": {
+          "$ref": "#/$defs/sha256Hex",
+          "description": "SHA-256 of the raw public key bytes at public_key_ref. Part of `signature`, therefore covered by the org countersignature (see CRYPTO_CONTRACT.md) — this is how the org vouches for the field key without the key traveling outside the signed envelope."
+        },
+        "sig_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "orgCountersignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["org_id", "key_id", "transparency_ref", "countersig_ref"],
+      "properties": {
+        "org_id": { "type": "string", "minLength": 1 },
+        "key_id": { "type": "string", "minLength": 1 },
+        "transparency_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pointer into the public transparency repo, e.g. \"git:keys@<commit-hash>\"."
+        },
+        "countersig_ref": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

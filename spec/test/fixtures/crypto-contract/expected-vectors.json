@@ -1,0 +1,27 @@
+{
+  "$comment": "Locked interoperability vectors for the VEP v0.1 signing contract. If any value here changes unintentionally, the crypto-contract tests MUST fail — that is the point of this file. See CRYPTO_CONTRACT.md.",
+
+  "content_jcs": "{\"assets\":[{\"capture_claim\":{\"app\":\"peaceos-capture\",\"device_key_id\":\"field-01\",\"location_precision\":\"redacted\"},\"captured_at\":\"2026-03-12T16:41:00Z\",\"filename\":\"testimonio_01.mp4\",\"media_type\":\"video/mp4\",\"sha256\":\"9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e\",\"size_bytes\":48213004}],\"created_at\":\"2026-03-14T10:22:00Z\",\"custody\":[{\"actor\":\"field-01\",\"at\":\"2026-03-12T16:41:00Z\",\"event\":\"captured\",\"sig_ref\":\"signatures/captured-01.sig\"},{\"actor\":\"coord-02\",\"at\":\"2026-03-13T09:00:00Z\",\"event\":\"imported\",\"sig_ref\":\"signatures/imported-02.sig\"}],\"redactions\":[{\"commitment\":\"bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda\",\"field\":\"witness_identity\",\"status\":\"withheld\"}],\"timestamps\":[{\"proof_ref\":\"timestamps/manifest.ots\",\"target\":\"content_hash\",\"type\":\"opentimestamps\"}],\"vep_version\":\"0.1\"}",
+
+  "content_hash": "d81cfdb46588bc4e64e7c421f0f2d07ddf4a9d2b5995013896f5bf6825c6466e",
+
+  "package_id": "sha256:d81cfdb46588bc4e64e7c421f0f2d07ddf4a9d2b5995013896f5bf6825c6466e",
+
+  "field_public_key": {
+    "$comment": "NOT a real Ed25519 key — fixed placeholder bytes 0x00..0x1f, used only to fix the public_key_sha256 vector shape. M1 replaces this with real libsodium-generated keys.",
+    "raw_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "sha256": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd"
+  },
+
+  "signed_content_jcs": "{\"assets\":[{\"capture_claim\":{\"app\":\"peaceos-capture\",\"device_key_id\":\"field-01\",\"location_precision\":\"redacted\"},\"captured_at\":\"2026-03-12T16:41:00Z\",\"filename\":\"testimonio_01.mp4\",\"media_type\":\"video/mp4\",\"sha256\":\"9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e\",\"size_bytes\":48213004}],\"created_at\":\"2026-03-14T10:22:00Z\",\"custody\":[{\"actor\":\"field-01\",\"at\":\"2026-03-12T16:41:00Z\",\"event\":\"captured\",\"sig_ref\":\"signatures/captured-01.sig\"},{\"actor\":\"coord-02\",\"at\":\"2026-03-13T09:00:00Z\",\"event\":\"imported\",\"sig_ref\":\"signatures/imported-02.sig\"}],\"redactions\":[{\"commitment\":\"bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda\",\"field\":\"witness_identity\",\"status\":\"withheld\"}],\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"field-01\",\"public_key_ref\":\"keys/field-01.pub\",\"public_key_sha256\":\"630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd\",\"sig_ref\":\"signatures/manifest.sig\"},\"timestamps\":[{\"proof_ref\":\"timestamps/manifest.ots\",\"target\":\"content_hash\",\"type\":\"opentimestamps\"}],\"vep_version\":\"0.1\"}",
+
+  "redaction_commitment": {
+    "field": "witness_identity",
+    "value": "Jane Doe",
+    "$comment_value": "Fictional placeholder name — not real evidence.",
+    "salt_base64": "oKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr8=",
+    "$comment_salt": "Fixed test-only salt (32 bytes, base64-encoded). A real salt is a per-field CSPRNG value generated and custodied by the organization; it is NEVER written to the package.",
+    "commitment_jcs": "{\"field\":\"witness_identity\",\"salt\":\"oKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr8=\",\"value\":\"Jane Doe\"}",
+    "commitment_hex": "bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda"
+  }
+}

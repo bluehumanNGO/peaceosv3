@@ -1,0 +1,46 @@
+{
+  "vep_version": "0.1",
+  "created_at": "2026-03-14T10:22:00Z",
+  "assets": [
+    {
+      "filename": "testimonio_01.mp4",
+      "media_type": "video/mp4",
+      "size_bytes": 48213004,
+      "sha256": "9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e",
+      "captured_at": "2026-03-12T16:41:00Z",
+      "capture_claim": {
+        "app": "peaceos-capture",
+        "device_key_id": "field-01",
+        "location_precision": "redacted"
+      }
+    }
+  ],
+  "custody": [
+    {
+      "event": "captured",
+      "actor": "field-01",
+      "at": "2026-03-12T16:41:00Z",
+      "sig_ref": "signatures/captured-01.sig"
+    },
+    {
+      "event": "imported",
+      "actor": "coord-02",
+      "at": "2026-03-13T09:00:00Z",
+      "sig_ref": "signatures/imported-02.sig"
+    }
+  ],
+  "redactions": [
+    {
+      "field": "witness_identity",
+      "commitment": "bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda",
+      "status": "withheld"
+    }
+  ],
+  "timestamps": [
+    {
+      "type": "opentimestamps",
+      "target": "content_hash",
+      "proof_ref": "timestamps/manifest.ots"
+    }
+  ]
+}

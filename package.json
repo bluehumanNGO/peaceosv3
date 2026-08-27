@@ -1,0 +1,21 @@
+{
+  "name": "peaceos-verify",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PeaceOS Verify — VEP format and offline verification tooling (Phase 1).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "test": "pnpm -r --if-present run test",
+    "typecheck": "pnpm -r --if-present run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

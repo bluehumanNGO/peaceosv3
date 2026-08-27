@@ -1,0 +1,29 @@
+{
+  "name": "@peaceos/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference TypeScript library: hashing, signing, timestamping, build-package and verify-package logic.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@peaceos/spec": "workspace:*",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "canonicalize": "^4.0.0",
+    "libsodium-wrappers": "^0.7.15",
+    "opentimestamps": "^0.4.9"
+  },
+  "devDependencies": {
+    "@types/opentimestamps": "^0.4.0"
+  }
+}

@@ -1,0 +1,5 @@
+This is a placeholder evidence file used only to demonstrate the PeaceOS
+Verify (VEP v0.1) package format. It contains no real evidence.
+
+In a real deployment this would be, for example, a video or photo captured
+in the field, referenced from the manifest by its SHA-256 digest.õ
