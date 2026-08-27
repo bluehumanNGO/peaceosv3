@@ -1,6 +1,6 @@
 {
   "vep_version": "0.1",
-  "package_id": "sha256:d81cfdb46588bc4e64e7c421f0f2d07ddf4a9d2b5995013896f5bf6825c6466e",
+  "package_id": "sha256:5ba841e02cd97a9da7bfa63f48ae336f3f80a92f4aabca10f5d3dc75cced9044",
   "created_at": "2026-03-14T10:22:00Z",
   "assets": [
     {
@@ -21,12 +21,16 @@
       "event": "captured",
       "actor": "field-01",
       "at": "2026-03-12T16:41:00Z",
+      "actor_public_key_ref": "keys/field-01.pub",
+      "actor_public_key_sha256": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd",
       "sig_ref": "signatures/captured-01.sig"
     },
     {
       "event": "imported",
       "actor": "coord-02",
       "at": "2026-03-13T09:00:00Z",
+      "actor_public_key_ref": "keys/coord-02.pub",
+      "actor_public_key_sha256": "72dbb7336c76780023f83da4c355f2eeea85733b13d3477697917790c1229084",
       "sig_ref": "signatures/imported-02.sig"
     }
   ],

@@ -67,7 +67,11 @@
         "size_bytes": { "type": "integer", "minimum": 0 },
         "sha256": { "$ref": "#/$defs/sha256Hex" },
         "captured_at": { "type": "string", "format": "date-time" },
-        "capture_claim": { "$ref": "#/$defs/captureClaim" }
+        "capture_claim": { "$ref": "#/$defs/captureClaim" },
+        "withheld": {
+          "type": "boolean",
+          "description": "true = this asset's bytes are deliberately not shipped in assets/ (asset-level redaction). Its sha256/size_bytes/media_type are still signed, so Verify reports it as \"withheld but committed\" rather than an integrity failure. Absent or false = the file MUST be present (M1 behavior, unchanged). See CRYPTO_CONTRACT.md §10."
+        }
       }
     },
     "captureClaim": {
@@ -83,14 +87,28 @@
     "custodyEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event", "actor", "at", "sig_ref"],
+      "required": ["event", "actor", "at", "actor_public_key_ref", "actor_public_key_sha256", "sig_ref"],
+      "description": "Ed25519-signed over event_hash = SHA-256(JCS({event, actor, at})); see CRYPTO_CONTRACT.md §9.",
       "properties": {
         "event": {
           "type": "string",
           "enum": ["captured", "imported", "exported", "reviewed"]
         },
-        "actor": { "type": "string", "minLength": 1 },
+        "actor": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pseudonymous actor key_id for this event (custody[0] is expected to be \"captured\"; not necessarily the same actor as the top-level field signature)."
+        },
         "at": { "type": "string", "format": "date-time" },
+        "actor_public_key_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path within the package to this event's actor's raw 32-byte Ed25519 public key file, e.g. \"keys/coord-02.pub\". Same pattern as signature.public_key_ref."
+        },
+        "actor_public_key_sha256": {
+          "$ref": "#/$defs/sha256Hex",
+          "description": "SHA-256 of the raw public key bytes at actor_public_key_ref. Part of the custodyEvent object, which lives inside `content` — protected transitively via content_hash, the same way assets[].sha256 is, with no separate attestation chain needed (unlike the top-level signature.public_key_sha256, which protects the key that itself signs content)."
+        },
         "sig_ref": { "type": "string", "minLength": 1 }
       }
     },

@@ -1,19 +1,36 @@
 {
-  "$comment": "Locked interoperability vectors for the VEP v0.1 signing contract. If any value here changes unintentionally, the crypto-contract tests MUST fail — that is the point of this file. See CRYPTO_CONTRACT.md.",
+  "$comment": "Locked interoperability vectors for the VEP v0.1 signing contract. If any value here changes unintentionally, the crypto-contract tests MUST fail — that is the point of this file. See CRYPTO_CONTRACT.md. Regenerated in M2 (§9: custody[] now carries actor_public_key_ref/actor_public_key_sha256, which are part of content, so content_hash/package_id/signed_content_jcs all changed from the M0.5/M1 values — see spec/CRYPTO_CONTRACT.md history and the M2 report for why.",
 
-  "content_jcs": "{\"assets\":[{\"capture_claim\":{\"app\":\"peaceos-capture\",\"device_key_id\":\"field-01\",\"location_precision\":\"redacted\"},\"captured_at\":\"2026-03-12T16:41:00Z\",\"filename\":\"testimonio_01.mp4\",\"media_type\":\"video/mp4\",\"sha256\":\"9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e\",\"size_bytes\":48213004}],\"created_at\":\"2026-03-14T10:22:00Z\",\"custody\":[{\"actor\":\"field-01\",\"at\":\"2026-03-12T16:41:00Z\",\"event\":\"captured\",\"sig_ref\":\"signatures/captured-01.sig\"},{\"actor\":\"coord-02\",\"at\":\"2026-03-13T09:00:00Z\",\"event\":\"imported\",\"sig_ref\":\"signatures/imported-02.sig\"}],\"redactions\":[{\"commitment\":\"bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda\",\"field\":\"witness_identity\",\"status\":\"withheld\"}],\"timestamps\":[{\"proof_ref\":\"timestamps/manifest.ots\",\"target\":\"content_hash\",\"type\":\"opentimestamps\"}],\"vep_version\":\"0.1\"}",
+  "content_jcs": "{\"assets\":[{\"capture_claim\":{\"app\":\"peaceos-capture\",\"device_key_id\":\"field-01\",\"location_precision\":\"redacted\"},\"captured_at\":\"2026-03-12T16:41:00Z\",\"filename\":\"testimonio_01.mp4\",\"media_type\":\"video/mp4\",\"sha256\":\"9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e\",\"size_bytes\":48213004}],\"created_at\":\"2026-03-14T10:22:00Z\",\"custody\":[{\"actor\":\"field-01\",\"actor_public_key_ref\":\"keys/field-01.pub\",\"actor_public_key_sha256\":\"630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd\",\"at\":\"2026-03-12T16:41:00Z\",\"event\":\"captured\",\"sig_ref\":\"signatures/captured-01.sig\"},{\"actor\":\"coord-02\",\"actor_public_key_ref\":\"keys/coord-02.pub\",\"actor_public_key_sha256\":\"72dbb7336c76780023f83da4c355f2eeea85733b13d3477697917790c1229084\",\"at\":\"2026-03-13T09:00:00Z\",\"event\":\"imported\",\"sig_ref\":\"signatures/imported-02.sig\"}],\"redactions\":[{\"commitment\":\"bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda\",\"field\":\"witness_identity\",\"status\":\"withheld\"}],\"timestamps\":[{\"proof_ref\":\"timestamps/manifest.ots\",\"target\":\"content_hash\",\"type\":\"opentimestamps\"}],\"vep_version\":\"0.1\"}",
 
-  "content_hash": "d81cfdb46588bc4e64e7c421f0f2d07ddf4a9d2b5995013896f5bf6825c6466e",
+  "content_hash": "5ba841e02cd97a9da7bfa63f48ae336f3f80a92f4aabca10f5d3dc75cced9044",
 
-  "package_id": "sha256:d81cfdb46588bc4e64e7c421f0f2d07ddf4a9d2b5995013896f5bf6825c6466e",
+  "package_id": "sha256:5ba841e02cd97a9da7bfa63f48ae336f3f80a92f4aabca10f5d3dc75cced9044",
 
   "field_public_key": {
-    "$comment": "NOT a real Ed25519 key — fixed placeholder bytes 0x00..0x1f, used only to fix the public_key_sha256 vector shape. M1 replaces this with real libsodium-generated keys.",
+    "$comment": "NOT a real Ed25519 key — fixed placeholder bytes 0x00..0x1f. Reused as custody[0] (\"captured\")'s actor key too, since that event's actor (\"field-01\") is the same identity as the top-level field signer in this example.",
     "raw_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     "sha256": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd"
   },
 
-  "signed_content_jcs": "{\"assets\":[{\"capture_claim\":{\"app\":\"peaceos-capture\",\"device_key_id\":\"field-01\",\"location_precision\":\"redacted\"},\"captured_at\":\"2026-03-12T16:41:00Z\",\"filename\":\"testimonio_01.mp4\",\"media_type\":\"video/mp4\",\"sha256\":\"9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e\",\"size_bytes\":48213004}],\"created_at\":\"2026-03-14T10:22:00Z\",\"custody\":[{\"actor\":\"field-01\",\"at\":\"2026-03-12T16:41:00Z\",\"event\":\"captured\",\"sig_ref\":\"signatures/captured-01.sig\"},{\"actor\":\"coord-02\",\"at\":\"2026-03-13T09:00:00Z\",\"event\":\"imported\",\"sig_ref\":\"signatures/imported-02.sig\"}],\"redactions\":[{\"commitment\":\"bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda\",\"field\":\"witness_identity\",\"status\":\"withheld\"}],\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"field-01\",\"public_key_ref\":\"keys/field-01.pub\",\"public_key_sha256\":\"630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd\",\"sig_ref\":\"signatures/manifest.sig\"},\"timestamps\":[{\"proof_ref\":\"timestamps/manifest.ots\",\"target\":\"content_hash\",\"type\":\"opentimestamps\"}],\"vep_version\":\"0.1\"}",
+  "coord_public_key": {
+    "$comment": "NOT a real Ed25519 key — fixed placeholder bytes 0x20..0x3f. custody[1] (\"imported\")'s actor (\"coord-02\") is a different identity from the field signer.",
+    "raw_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "sha256": "72dbb7336c76780023f83da4c355f2eeea85733b13d3477697917790c1229084"
+  },
+
+  "custody_events": {
+    "captured": {
+      "payload_jcs": "{\"actor\":\"field-01\",\"at\":\"2026-03-12T16:41:00Z\",\"event\":\"captured\"}",
+      "event_hash": "fcc0d90c1904dfb600049ab3d6651d9a06c92c8bb82a172aea751a1a62f23943"
+    },
+    "imported": {
+      "payload_jcs": "{\"actor\":\"coord-02\",\"at\":\"2026-03-13T09:00:00Z\",\"event\":\"imported\"}",
+      "event_hash": "66651d3aaecbe2ea9ba221e428f11777819cbbe550157fd2dab0b88559ab890c"
+    }
+  },
+
+  "signed_content_jcs": "{\"assets\":[{\"capture_claim\":{\"app\":\"peaceos-capture\",\"device_key_id\":\"field-01\",\"location_precision\":\"redacted\"},\"captured_at\":\"2026-03-12T16:41:00Z\",\"filename\":\"testimonio_01.mp4\",\"media_type\":\"video/mp4\",\"sha256\":\"9f2c6a1e4d3b0c5f7e8a9d2b1c4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e\",\"size_bytes\":48213004}],\"created_at\":\"2026-03-14T10:22:00Z\",\"custody\":[{\"actor\":\"field-01\",\"actor_public_key_ref\":\"keys/field-01.pub\",\"actor_public_key_sha256\":\"630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd\",\"at\":\"2026-03-12T16:41:00Z\",\"event\":\"captured\",\"sig_ref\":\"signatures/captured-01.sig\"},{\"actor\":\"coord-02\",\"actor_public_key_ref\":\"keys/coord-02.pub\",\"actor_public_key_sha256\":\"72dbb7336c76780023f83da4c355f2eeea85733b13d3477697917790c1229084\",\"at\":\"2026-03-13T09:00:00Z\",\"event\":\"imported\",\"sig_ref\":\"signatures/imported-02.sig\"}],\"redactions\":[{\"commitment\":\"bc412f6ad837a5825c2870c62a15c32ffd4f477208c2ae8a3e281f2871a3ddda\",\"field\":\"witness_identity\",\"status\":\"withheld\"}],\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"field-01\",\"public_key_ref\":\"keys/field-01.pub\",\"public_key_sha256\":\"630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd\",\"sig_ref\":\"signatures/manifest.sig\"},\"timestamps\":[{\"proof_ref\":\"timestamps/manifest.ots\",\"target\":\"content_hash\",\"type\":\"opentimestamps\"}],\"vep_version\":\"0.1\"}",
 
   "redaction_commitment": {
     "field": "witness_identity",

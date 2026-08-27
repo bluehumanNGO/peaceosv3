@@ -107,4 +107,39 @@ describe('manifest.schema.json', () => {
     tampered.timestamps[0]!.target = 'manifest_sha256';
     expect(validate(tampered)).toBe(false);
   });
+
+  it('rejects a custody event missing actor_public_key_ref (M2, §9)', () => {
+    const validate = compileValidator();
+    const tampered = structuredClone(validManifest) as { custody: Array<Record<string, unknown>> };
+    delete tampered.custody[0]!.actor_public_key_ref;
+    expect(validate(tampered)).toBe(false);
+  });
+
+  it('rejects a custody event missing actor_public_key_sha256 (M2, §9)', () => {
+    const validate = compileValidator();
+    const tampered = structuredClone(validManifest) as { custody: Array<Record<string, unknown>> };
+    delete tampered.custody[0]!.actor_public_key_sha256;
+    expect(validate(tampered)).toBe(false);
+  });
+
+  it('rejects a custody event with an unknown event type', () => {
+    const validate = compileValidator();
+    const tampered = structuredClone(validManifest) as { custody: Array<Record<string, unknown>> };
+    tampered.custody[0]!.event = 'destroyed';
+    expect(validate(tampered)).toBe(false);
+  });
+
+  it('accepts an asset marked withheld (M2, §10)', () => {
+    const validate = compileValidator();
+    const tampered = structuredClone(validManifest) as { assets: Array<Record<string, unknown>> };
+    tampered.assets[0]!.withheld = true;
+    expect(validate(tampered)).toBe(true);
+  });
+
+  it('rejects a non-boolean withheld value', () => {
+    const validate = compileValidator();
+    const tampered = structuredClone(validManifest) as { assets: Array<Record<string, unknown>> };
+    tampered.assets[0]!.withheld = 'yes';
+    expect(validate(tampered)).toBe(false);
+  });
 });

@@ -89,6 +89,49 @@ describe('crypto contract — redaction commitment (injective by construction)',
   });
 });
 
+describe('crypto contract — custody event signing (§9, defined in M2)', () => {
+  function eventHash(payload: { event: string; actor: string; at: string }): string {
+    return sha256Hex(canonicalize(payload) as string);
+  }
+
+  it('matches the locked vector for event_hash = SHA-256(JCS({ event, actor, at })) — "captured"', () => {
+    const captured = content.custody[0]!;
+    expect(canonicalize({ event: captured.event, actor: captured.actor, at: captured.at })).toBe(
+      expected.custody_events.captured.payload_jcs,
+    );
+    expect(eventHash({ event: captured.event, actor: captured.actor, at: captured.at })).toBe(
+      expected.custody_events.captured.event_hash,
+    );
+  });
+
+  it('matches the locked vector for event_hash — "imported"', () => {
+    const imported = content.custody[1]!;
+    expect(eventHash({ event: imported.event, actor: imported.actor, at: imported.at })).toBe(
+      expected.custody_events.imported.event_hash,
+    );
+  });
+
+  it('excludes sig_ref and the key-binding fields from event_payload (mirrors content excluding signature/org)', () => {
+    const captured = content.custody[0]!;
+    const payloadKeys = Object.keys(JSON.parse(expected.custody_events.captured.payload_jcs));
+    expect(payloadKeys.sort()).toEqual(['actor', 'at', 'event']);
+    expect(payloadKeys).not.toContain('sig_ref');
+    expect(payloadKeys).not.toContain('actor_public_key_ref');
+    expect(payloadKeys).not.toContain('actor_public_key_sha256');
+    void captured;
+  });
+
+  it('two different actors produce two different event_hashes even with structurally similar payloads', () => {
+    expect(expected.custody_events.captured.event_hash).not.toBe(expected.custody_events.imported.event_hash);
+  });
+
+  it("binds each custody actor's public key via actor_public_key_sha256, covered transitively by content_hash (no separate attestation chain needed — §9)", () => {
+    const coordRawKey = Buffer.from(expected.coord_public_key.raw_hex, 'hex');
+    expect(sha256Hex(coordRawKey)).toBe(expected.coord_public_key.sha256);
+    expect(expected.content_jcs).toContain(expected.coord_public_key.sha256);
+  });
+});
+
 describe('crypto contract — fixture self-consistency', () => {
   it('valid-manifest.json package_id matches the locked content_hash vector', () => {
     expect(validManifest.package_id).toBe(expected.package_id);
@@ -104,5 +147,10 @@ describe('crypto contract — fixture self-consistency', () => {
 
   it('valid-manifest.json timestamps target content_hash, not the whole manifest', () => {
     expect(validManifest.timestamps[0]?.target).toBe('content_hash');
+  });
+
+  it('valid-manifest.json custody actor key hashes match the locked vectors', () => {
+    expect(validManifest.custody[0]?.actor_public_key_sha256).toBe(expected.field_public_key.sha256);
+    expect(validManifest.custody[1]?.actor_public_key_sha256).toBe(expected.coord_public_key.sha256);
   });
 });

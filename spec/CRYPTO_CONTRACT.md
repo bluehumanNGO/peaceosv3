@@ -220,15 +220,82 @@ inventing a second, bespoke framing rule.
   never a per-field `alg` switch that could make different parts of the same
   package use different primitives.
 
-## 8. What this contract does not cover
+## 9. Chain of custody (custody[]) — defined in M2
 
-- Chain-of-custody event signature payloads (`custody[].sig_ref`) — deferred
-  to M2, per the spec's own milestone plan (`docs/spec-source.md`, §8).
+Each `custody[]` entry is signed independently by its own actor, following
+the same shape as the top-level field signature (§4-§5), not a new pattern:
+
+```
+event_payload = JCS({ event, actor, at })                       -- excludes sig_ref and the key-binding fields
+event_hash    = SHA-256(event_payload)                          32 raw bytes, same rule as content_hash (§4)
+event.sig_ref = Ed25519_sign(actor_private_key, event_hash)
+```
+
+`sig_ref`, `actor_public_key_ref`, and `actor_public_key_sha256` are
+excluded from `event_payload` for the same reason `signature`/`org` are
+excluded from `content`: none of them should be signing a structure that
+points back at itself. Unlike the top-level signature, this is not
+strictly circular for the key-binding fields (they don't depend on the
+event's own signature) — excluded anyway, for one uniform rule instead of
+two.
+
+**Key resolution — no separate attestation chain needed.** The top-level
+`signature.public_key_sha256` needs the org's countersignature to vouch for
+it specifically because that key is the one signing `content`, which can't
+vouch for itself. Custody events don't have that problem: `custody[]` is
+itself part of `content` (§3), so `actor_public_key_ref` and
+`actor_public_key_sha256` on every event are already covered, for free, by
+the exact same chain that covers `assets[].sha256` — `content_hash` →
+field signature → org countersignature. Swap `keys/coord-02.pub` for a
+different key without changing the recorded `actor_public_key_sha256`, and
+the swapped file's hash won't match → caught. Change the recorded hash to
+match a swapped key, and `content_hash` changes → the existing field
+signature (computed over the old `content_hash`) no longer verifies, and
+forging a new one still leaves the org countersignature uncovering it,
+which needs the org's private key. Same protection, no new machinery.
+
+**Actor identity.** `actor` is the key_id, exactly like `signature.key_id`:
+the raw public key lives at `keys/<actor>.pub`. An actor may (`custody[0]`,
+the capturing device) or may not (a later `imported`/`exported`/`reviewed`
+step by a different handler) be the same identity as the top-level field
+signer — this contract does not require or check that they match. Every
+actor stays pseudonymous; nothing here ties a `custody[]` entry to a
+real-world identity any more than the top-level signature does.
+
+**Ordering, checked by Verify (M2), not by this document's hashing rules:**
+`custody[0].event` MUST be `"captured"`; each subsequent entry's `at` MUST
+be `>=` the previous entry's `at` (non-decreasing — ties allowed, since
+timestamp resolution can coincide; strictly-increasing was considered and
+rejected as needlessly brittle). This is a semantic check over already-
+verified data, not a canonicalization rule, so it lives in `core`, not here.
+
+## 10. Asset-level redaction (`assets[].withheld`) — defined in M2
+
+An asset's `sha256` (already signed as part of `content`, same as always)
+**is** its own commitment — no salt, no separate commitment field, unlike
+§6's field-level redactions. Salting exists there to stop guessing a small
+value space (e.g. a name) from its hash; a file's sha256 doesn't have that
+problem, and the file is either produced when needed or it isn't.
+
+```
+asset.withheld = true   =>  Verify does not require assets/<filename> to
+                             be present. If present anyway, its hash is
+                             still checked normally. If absent, Verify
+                             reports "withheld but committed" using the
+                             already-signed sha256/size_bytes/media_type —
+                             never as an integrity failure.
+asset.withheld = false, or the field absent (M1 packages)
+                         =>  the file MUST be present; unchanged M1 behavior.
+```
+
+## 11. What this contract does not cover
+
 - Merkle-based multi-asset/redaction proofs — explicitly not needed for v0.1;
-  per-field salted commitments (§6) and the already-signed per-asset
-  `sha256` cover v0.1's redaction and integrity needs without a Merkle tree.
+  per-field salted commitments (§6), asset-level `withheld` (§10), and the
+  already-signed per-asset `sha256` cover v0.1's redaction and integrity
+  needs without a Merkle tree.
 - Actual implementation of hashing/signing/timestamping functions — that is
-  `core`'s job (M1), per `AGENTS.md`'s repository layout. This document is
-  the contract `core` must implement against; it contains no executable
+  `core`'s job (M1/M2), per `AGENTS.md`'s repository layout. This document
+  is the contract `core` must implement against; it contains no executable
   library code itself, only the test-only vectors under
   `test/fixtures/crypto-contract/`.
