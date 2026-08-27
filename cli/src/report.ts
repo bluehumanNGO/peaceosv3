@@ -7,6 +7,8 @@ const CHECK_LABELS: Record<CheckId, string> = {
   org_identity: 'Org identity',
   timestamp: 'Timestamp',
   package_id: 'Package ID',
+  custody: 'Custody',
+  redactions: 'Redactions',
 };
 
 const STATUS_LABELS = {

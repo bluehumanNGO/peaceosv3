@@ -100,7 +100,7 @@ describe('peaceos-verify create + check (end to end through the CLI layer)', () 
     logs = [];
     await runCheck([outDir, '--json']);
     const parsed = JSON.parse(logs.join('\n'));
-    expect(parsed.checks).toHaveLength(6);
+    expect(parsed.checks).toHaveLength(8);
     expect(typeof parsed.verdict).toBe('string');
   });
 
