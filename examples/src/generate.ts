@@ -14,6 +14,16 @@ const ASSET_FILENAME = 'testimonio_01.txt';
 const ORG_ID = 'org-recolectora';
 const ORG_KEY_ID = 'org-2026';
 const FIELD_KEY_ID = 'field-01';
+const COORD_KEY_ID = 'coord-02';
+const WITHHELD_ASSET_FILENAME = 'testimonio_02_sensitive.txt';
+const REDACTION_FIELD = 'witness_identity';
+const REDACTION_VALUE = 'Jane Doe';
+// Fixed, NOT randomly generated, so examples/README.md can show a working
+// `reveal` command that stays correct across regenerations. This is only
+// safe because the example is fictional evidence with a placeholder name —
+// a real deployment MUST use generateRedactionSalt() (a fresh CSPRNG value
+// per field), never a fixed constant.
+const REDACTION_SALT_BASE64 = 'EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8=';
 
 async function flipLastByte(path: string): Promise<void> {
   const bytes = await readFile(path);
@@ -109,6 +119,64 @@ async function main(): Promise<void> {
   (manifest.signature as Record<string, unknown>).sig_ref = '../../../../../../etc/passwd';
   await writeManifest(pathTraversal, manifest);
   console.log('  tampered-path-traversal.vep — signature.sig_ref rewritten to a "../" path.');
+
+  // --- M2: a package with a custody chain, a field redaction (reveal-mode
+  // demo), and a withheld asset. Uses local-pending timestamping — the
+  // network-stamped example above already demonstrates real submission;
+  // repeating it here would just slow down `generate` for no new coverage.
+  const coordKeypair = await generateEd25519Keypair();
+  await writeFile(join(KEYS_DIR, `${COORD_KEY_ID}.pub`), Buffer.from(coordKeypair.publicKey));
+  await writeFile(join(KEYS_DIR, `${COORD_KEY_ID}.key`), Buffer.from(coordKeypair.privateKey));
+
+  const withheldAssetSourcePath = join(PACKAGE_ROOT, 'src', 'sample-withheld-asset.txt');
+
+  const custodyResult = await build({
+    outDir: join(PACKAGES_DIR, 'valid-with-custody.vep'),
+    assets: [
+      { sourcePath: assetSourcePath, filename: ASSET_FILENAME, mediaType: 'text/plain' },
+      { sourcePath: withheldAssetSourcePath, filename: WITHHELD_ASSET_FILENAME, mediaType: 'text/plain', withheld: true },
+    ],
+    fieldKeyId: FIELD_KEY_ID,
+    fieldPublicKey: fieldKeypair.publicKey,
+    fieldPrivateKey: fieldKeypair.privateKey,
+    orgId: ORG_ID,
+    orgKeyId: ORG_KEY_ID,
+    orgPrivateKey: orgKeypair.privateKey,
+    transparencyRef: `git:keys@${randomBytes(20).toString('hex')}`,
+    timestamp: { mode: 'local-pending' },
+    custody: [
+      {
+        event: 'captured',
+        actor: FIELD_KEY_ID,
+        at: '2026-03-12T16:41:00.000Z',
+        actorPublicKey: fieldKeypair.publicKey,
+        actorPrivateKey: fieldKeypair.privateKey,
+      },
+      {
+        event: 'imported',
+        actor: COORD_KEY_ID,
+        at: '2026-03-13T09:00:00.000Z',
+        actorPublicKey: coordKeypair.publicKey,
+        actorPrivateKey: coordKeypair.privateKey,
+      },
+    ],
+    redactions: [{ field: REDACTION_FIELD, saltBase64: REDACTION_SALT_BASE64, value: REDACTION_VALUE }],
+  });
+  console.log(`  valid-with-custody.vep package_id: ${custodyResult.packageId}`);
+  console.log('  valid-with-custody.vep — custody chain + redaction + withheld asset; see examples/README.md for the reveal-mode command.');
+
+  const custodyOutOfOrder = await copyPackage('tampered-custody-out-of-order');
+  // copyPackage always clones valid.vep, which has no custody[] — regenerate
+  // this one from valid-with-custody.vep specifically instead.
+  await rm(custodyOutOfOrder, { recursive: true, force: true });
+  await cp(join(PACKAGES_DIR, 'valid-with-custody.vep'), custodyOutOfOrder, { recursive: true });
+  const custodyManifest = await readManifest(custodyOutOfOrder);
+  const custodyEvents = custodyManifest.custody as Array<Record<string, unknown>>;
+  const swappedAt = custodyEvents[0]!.at;
+  custodyEvents[0]!.at = custodyEvents[1]!.at;
+  custodyEvents[1]!.at = swappedAt;
+  await writeManifest(custodyOutOfOrder, custodyManifest);
+  console.log('  tampered-custody-out-of-order.vep — captured/imported timestamps swapped (also breaks both event signatures).');
 
   console.log('Done.');
 }

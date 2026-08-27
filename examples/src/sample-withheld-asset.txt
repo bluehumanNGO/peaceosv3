@@ -1,0 +1,4 @@
+This placeholder stands in for a second, more sensitive piece of evidence
+that an organization has chosen not to distribute yet. In this example
+package it is marked `withheld: true`: its SHA-256 is still signed as part
+of the manifest, but the file itself is not shipped in assets/.
