@@ -113,4 +113,10 @@ peaceos-verify check ./caso-x.vep --transparency ./peaceos-transparency \
   passed: if you explicitly asked for the stronger guarantee, `check` won't
   quietly hand you the weaker one instead.
 
+**Metadata warning:** the flag contacts the endpoint you point it at, and
+that operator can see your IP and the block height you're asking about at
+instant T; a block height alone doesn't reveal which package is being
+verified, but it's information that, in the default mode, never leaves your
+machine at all. For maximum privacy, point it at your own node.
+
 See `examples/README.md` for ready-to-run valid and tampered packages.
