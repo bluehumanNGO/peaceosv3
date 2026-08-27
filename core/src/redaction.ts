@@ -17,3 +17,15 @@ export function computeRedactionCommitment({ saltBase64, field, value }: Redacti
 export function generateRedactionSalt(): string {
   return randomBytes(32).toString('base64');
 }
+
+/**
+ * Reveal mode (B2): given salt + value the organization custodies OUTSIDE
+ * the package, recompute the commitment and confirm it matches what's in
+ * the manifest. Never attempts anything, never partially matches — the
+ * salt/value pair either reproduces the exact committed digest or it
+ * doesn't. Callers are responsible for never invoking this without a real,
+ * caller-supplied salt (there is no "try without salt" mode by design).
+ */
+export function verifyRedactionReveal(manifestCommitment: string, input: RedactionCommitmentInput): boolean {
+  return computeRedactionCommitment(input) === manifestCommitment;
+}

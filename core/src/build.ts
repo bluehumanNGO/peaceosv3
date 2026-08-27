@@ -4,9 +4,21 @@ import { dirname } from 'node:path';
 import { MANIFEST_SCHEMA_VERSION } from '@peaceos/spec';
 
 import { buildSignedContent, canonicalizeJcs, computeContentHash, derivePackageId, sha256Hex } from './canonical.js';
-import { assetRef, fieldPublicKeyRef, KEYS_DIR, MANIFEST_FILE, MANIFEST_SIGNATURE_FILE, ORG_COUNTERSIGNATURE_FILE, TIMESTAMP_PROOF_FILE } from './layout.js';
+import { computeCustodyEventHash } from './custody.js';
+import {
+  actorPublicKeyRef,
+  assetRef,
+  custodyEventSigRef,
+  fieldPublicKeyRef,
+  KEYS_DIR,
+  MANIFEST_FILE,
+  MANIFEST_SIGNATURE_FILE,
+  ORG_COUNTERSIGNATURE_FILE,
+  TIMESTAMP_PROOF_FILE,
+} from './layout.js';
 import { signDetached } from './keys.js';
 import { resolveSafePath } from './paths.js';
+import { computeRedactionCommitment } from './redaction.js';
 import { validateManifestSchema } from './schema.js';
 import { createLocalPendingProof, createTimestampProof } from './timestamp.js';
 import type { BuildInput, BuildResult } from './types.js';
@@ -41,9 +53,36 @@ export async function build(input: BuildInput): Promise<BuildResult> {
         if (asset.captureClaim.locationPrecision) claim.location_precision = asset.captureClaim.locationPrecision;
         if (Object.keys(claim).length > 0) entry.capture_claim = claim;
       }
-      return { entry, sourceBytes };
+      if (asset.withheld) entry.withheld = true;
+      return { entry, sourceBytes, withheld: asset.withheld === true };
     }),
   );
+
+  const custodyEvents = input.custody ?? [];
+  const custodyEntries = custodyEvents.map((event, index) => {
+    const payload = { event: event.event, actor: event.actor, at: event.at };
+    const eventHash = computeCustodyEventHash(payload);
+    return {
+      entry: {
+        event: event.event,
+        actor: event.actor,
+        at: event.at,
+        actor_public_key_ref: actorPublicKeyRef(event.actor),
+        actor_public_key_sha256: sha256Hex(Buffer.from(event.actorPublicKey)),
+        sig_ref: custodyEventSigRef(event.event, index + 1),
+      },
+      eventHash,
+      actorPublicKeyBytes: Buffer.from(event.actorPublicKey),
+      actorPrivateKey: event.actorPrivateKey,
+    };
+  });
+
+  const redactionInputs = input.redactions ?? [];
+  const redactionEntries = redactionInputs.map((redaction) => ({
+    field: redaction.field,
+    commitment: computeRedactionCommitment(redaction),
+    status: redaction.status ?? ('withheld' as const),
+  }));
 
   const content: Record<string, unknown> = {
     vep_version: MANIFEST_SCHEMA_VERSION,
@@ -51,6 +90,8 @@ export async function build(input: BuildInput): Promise<BuildResult> {
     assets: assetEntries.map((a) => a.entry),
     timestamps: [{ type: 'opentimestamps', target: 'content_hash', proof_ref: TIMESTAMP_PROOF_FILE }],
   };
+  if (custodyEntries.length > 0) content.custody = custodyEntries.map((c) => c.entry);
+  if (redactionEntries.length > 0) content.redactions = redactionEntries;
 
   const { contentHash, contentHashHex } = computeContentHash(content);
   const packageId = derivePackageId(contentHashHex);
@@ -93,13 +134,21 @@ export async function build(input: BuildInput): Promise<BuildResult> {
     proofBytes = await createTimestampProof(contentHash);
   }
 
-  for (const { entry, sourceBytes } of assetEntries) {
+  for (const { entry, sourceBytes, withheld } of assetEntries) {
+    if (withheld) continue;
     await writeFileSafely(input.outDir, assetRef(entry.filename as string), sourceBytes);
   }
   await writeFileSafely(input.outDir, KEYS_DIR + '/' + input.fieldKeyId + '.pub', fieldPublicKeyBytes);
   await writeFileSafely(input.outDir, MANIFEST_SIGNATURE_FILE, fieldSigBytes);
   await writeFileSafely(input.outDir, ORG_COUNTERSIGNATURE_FILE, orgSigBytes);
   await writeFileSafely(input.outDir, TIMESTAMP_PROOF_FILE, proofBytes);
+
+  for (const custodyEvent of custodyEntries) {
+    await writeFileSafely(input.outDir, custodyEvent.entry.actor_public_key_ref, custodyEvent.actorPublicKeyBytes);
+    const eventSigBytes = await signDetached(custodyEvent.eventHash, custodyEvent.actorPrivateKey);
+    await writeFileSafely(input.outDir, custodyEvent.entry.sig_ref, eventSigBytes);
+  }
+
   await writeFileSafely(input.outDir, MANIFEST_FILE, Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
 
   return { outDir: input.outDir, packageId, contentHashHex };

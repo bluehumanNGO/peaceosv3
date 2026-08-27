@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { buildSignedContent, canonicalizeJcs, computeContentHash, derivePackageId, sha256Hex } from './canonical.js';
+import { computeCustodyEventHash } from './custody.js';
 import { MANIFEST_FILE } from './layout.js';
 import { verifyDetached } from './keys.js';
 import { resolveSafePath, UnsafePathError } from './paths.js';
@@ -8,7 +9,16 @@ import { validateManifestSchema } from './schema.js';
 import { confirmBitcoinAnchor, verifyTimestampProofOffline } from './timestamp.js';
 import type { CheckId, CheckResult, VerifyReport } from './types.js';
 
-const ALL_CHECK_IDS: CheckId[] = ['integrity', 'field_signature', 'org_countersignature', 'org_identity', 'timestamp', 'package_id'];
+const ALL_CHECK_IDS: CheckId[] = [
+  'integrity',
+  'field_signature',
+  'org_countersignature',
+  'org_identity',
+  'timestamp',
+  'package_id',
+  'custody',
+  'redactions',
+];
 
 export interface VerifyOptions {
   /** Local checkout of the public organizational-key transparency repo. Without it, org_identity and org_countersignature report not_determined — never ok. */
@@ -49,12 +59,18 @@ async function checkIntegrity(packageRoot: string, assets: Array<Record<string, 
 
   for (const asset of assets) {
     const filename = asset.filename;
+    const withheld = asset.withheld === true;
     try {
       const path = resolveSafePath(packageRoot, `assets/${String(filename)}`);
       let bytes: Buffer;
       try {
         bytes = await readFile(path);
       } catch (err) {
+        if (withheld) {
+          // M2 §10: an absent file for a withheld asset is expected, not a
+          // defect — reported by the redactions check, not counted here.
+          continue;
+        }
         perAsset.push({ filename, ok: false, reason: `file not readable: ${(err as Error).message}` });
         continue;
       }
@@ -65,15 +81,18 @@ async function checkIntegrity(packageRoot: string, assets: Array<Record<string, 
         perAsset.push({ filename, ok: false, reason: `sha256 mismatch: manifest says ${String(asset.sha256)}, file hashes to ${actualSha256}` });
       }
     } catch (err) {
+      if (withheld) continue;
       perAsset.push({ filename, ok: false, reason: (err as Error).message });
     }
   }
 
-  const allOk = perAsset.length > 0 && perAsset.every((a) => a.ok);
+  const allOk = perAsset.every((a) => a.ok);
   return {
     id: 'integrity',
     status: allOk ? 'ok' : 'fail',
-    message: allOk ? `All ${perAsset.length} asset(s) match their recorded SHA-256.` : 'One or more assets failed integrity verification.',
+    message: allOk
+      ? `${perAsset.length} present asset(s) match their recorded SHA-256 (withheld assets, if any, are reported by the redactions check).`
+      : 'One or more assets failed integrity verification.',
     details: { assets: perAsset },
   };
 }
@@ -285,6 +304,143 @@ async function checkTimestamp(
   };
 }
 
+interface CustodyEventReport {
+  index: number;
+  event: unknown;
+  actor: unknown;
+  ok: boolean;
+  reason?: string;
+}
+
+async function checkCustody(packageRoot: string, custody: Array<Record<string, unknown>> | undefined): Promise<CheckResult> {
+  if (!custody || custody.length === 0) {
+    return { id: 'custody', status: 'ok', message: 'No custody events present.' };
+  }
+
+  const perEvent: CustodyEventReport[] = [];
+  let previousAtMs: number | null = null;
+
+  for (let i = 0; i < custody.length; i++) {
+    const event = custody[i]!;
+    const issues: string[] = [];
+
+    if (i === 0 && event.event !== 'captured') {
+      issues.push(`chain must start with "captured", but custody[0].event is "${String(event.event)}"`);
+    }
+
+    const at = String(event.at);
+    const atMs = Date.parse(at);
+    if (Number.isNaN(atMs)) {
+      issues.push(`malformed "at" timestamp: "${at}"`);
+    } else {
+      if (previousAtMs !== null && atMs < previousAtMs) {
+        issues.push(`out of order: at (${at}) precedes the previous event's at`);
+      }
+      previousAtMs = atMs;
+    }
+
+    let pubKeyPath: string | null = null;
+    let sigPath: string | null = null;
+    try {
+      pubKeyPath = resolveSafePath(packageRoot, String(event.actor_public_key_ref));
+      sigPath = resolveSafePath(packageRoot, String(event.sig_ref));
+    } catch (err) {
+      issues.push(`unsafe path: ${(err as Error).message}`);
+    }
+
+    if (pubKeyPath && sigPath) {
+      let pubKeyBytes: Buffer | null = null;
+      try {
+        pubKeyBytes = await readFile(pubKeyPath);
+      } catch (err) {
+        issues.push(`actor public key not readable: ${(err as Error).message}`);
+      }
+
+      if (pubKeyBytes) {
+        const actualKeySha256 = sha256Hex(pubKeyBytes);
+        if (actualKeySha256 !== event.actor_public_key_sha256) {
+          issues.push(
+            `actor public key hashes to ${actualKeySha256}, not actor_public_key_sha256 (${String(event.actor_public_key_sha256)})`,
+          );
+        } else {
+          try {
+            const sigBytes = await readFile(sigPath);
+            const eventHash = computeCustodyEventHash({ event: String(event.event), actor: String(event.actor), at });
+            const ok = await verifyDetached(sigBytes, eventHash, pubKeyBytes);
+            if (!ok) issues.push('signature does not verify against event_hash');
+          } catch (err) {
+            issues.push(`signature file not readable: ${(err as Error).message}`);
+          }
+        }
+      }
+    }
+
+    perEvent.push({ index: i, event: event.event, actor: event.actor, ok: issues.length === 0, reason: issues.length > 0 ? issues.join('; ') : undefined });
+  }
+
+  const allOk = perEvent.every((e) => e.ok);
+  return {
+    id: 'custody',
+    status: allOk ? 'ok' : 'fail',
+    message: allOk
+      ? `All ${perEvent.length} custody event(s) verified: starts with "captured", chronologically ordered, each actor's signature verifies.`
+      : 'One or more custody events failed verification (see details).',
+    details: { events: perEvent },
+  };
+}
+
+async function checkRedactions(
+  packageRoot: string,
+  redactions: Array<Record<string, unknown>> | undefined,
+  assets: Array<Record<string, unknown>>,
+): Promise<CheckResult> {
+  const fieldResults = (redactions ?? []).map((redaction) => {
+    const commitment = redaction.commitment;
+    const wellFormed = typeof commitment === 'string' && /^[0-9a-f]{64}$/.test(commitment);
+    return {
+      field: redaction.field,
+      status: redaction.status,
+      ok: wellFormed,
+      reason: wellFormed ? undefined : 'commitment is not a well-formed 64-hex SHA-256 digest',
+    };
+  });
+
+  const withheldAssets = assets.filter((asset) => asset.withheld === true);
+  const assetResults = await Promise.all(
+    withheldAssets.map(async (asset) => {
+      let present = false;
+      try {
+        const path = resolveSafePath(packageRoot, `assets/${String(asset.filename)}`);
+        await readFile(path);
+        present = true;
+      } catch {
+        present = false;
+      }
+      return {
+        filename: asset.filename,
+        sha256: asset.sha256,
+        present,
+        status: 'withheld but committed',
+      };
+    }),
+  );
+
+  if (fieldResults.length === 0 && assetResults.length === 0) {
+    return { id: 'redactions', status: 'ok', message: 'No redactions present.' };
+  }
+
+  const allOk = fieldResults.every((f) => f.ok);
+  return {
+    id: 'redactions',
+    status: allOk ? 'ok' : 'fail',
+    message: allOk
+      ? `${fieldResults.length} field redaction(s) well-formed; ${assetResults.length} withheld asset(s) committed via their signed sha256. ` +
+        'Confirming a specific commitment matches a real (salt, value) requires reveal mode.'
+      : 'One or more redaction commitments are malformed.',
+    details: { fields: fieldResults, assets: assetResults },
+  };
+}
+
 export async function verify(packagePath: string, options: VerifyOptions = {}): Promise<VerifyReport> {
   let manifestPath: string;
   try {
@@ -335,8 +491,23 @@ export async function verify(packagePath: string, options: VerifyOptions = {}): 
     contentHashHex,
     options.checkBitcoinSource,
   );
+  const custodyCheck = await checkCustody(packagePath, manifest.custody as Array<Record<string, unknown>> | undefined);
+  const redactionsCheck = await checkRedactions(
+    packagePath,
+    manifest.redactions as Array<Record<string, unknown>> | undefined,
+    manifest.assets as Array<Record<string, unknown>>,
+  );
 
-  const checks: CheckResult[] = [integrityCheck, fieldSigCheck, orgCountersigCheck, orgIdentityCheck, timestampCheck, packageIdCheck];
+  const checks: CheckResult[] = [
+    integrityCheck,
+    fieldSigCheck,
+    orgCountersigCheck,
+    orgIdentityCheck,
+    timestampCheck,
+    packageIdCheck,
+    custodyCheck,
+    redactionsCheck,
+  ];
   const verdict = checks.every((c) => c.status === 'ok') ? 'authentic' : 'problems_detected';
 
   return {

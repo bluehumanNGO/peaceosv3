@@ -124,7 +124,7 @@ describe('verify — negative cases (each MUST fail, per M1 requirements)', () =
     const report = await verify(outDir, { transparencyDir });
 
     expect(report.schemaValid).toBe(false);
-    expect(report.checks).toHaveLength(6);
+    expect(report.checks).toHaveLength(8);
     for (const check of report.checks) {
       expect(check.status).not.toBe('ok');
     }

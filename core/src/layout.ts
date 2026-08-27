@@ -15,3 +15,12 @@ export function assetRef(filename: string): string {
 export function fieldPublicKeyRef(fieldKeyId: string): string {
   return `${KEYS_DIR}/${fieldKeyId}.pub`;
 }
+
+export function actorPublicKeyRef(actor: string): string {
+  return `${KEYS_DIR}/${actor}.pub`;
+}
+
+/** Mirrors the spec-source.md example naming: signatures/captured-01.sig, signatures/imported-02.sig, ... */
+export function custodyEventSigRef(event: string, indexOneBased: number): string {
+  return `${SIGNATURES_DIR}/${event}-${String(indexOneBased).padStart(2, '0')}.sig`;
+}
