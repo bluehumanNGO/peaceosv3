@@ -10,6 +10,15 @@ import type * as Sodium from 'libsodium-wrappers';
 // quirk). Its CJS build (dist/modules/libsodium-wrappers.js) works
 // correctly, so it's loaded via createRequire, matching the same pattern
 // used for ajv-formats in schema.ts.
+//
+// Pinned to exactly 0.7.16 (package.json: "libsodium-wrappers": "0.7.16",
+// no caret) rather than left on a ^0.7.15 range, specifically because of
+// this bug: an upstream patch release could fix, change, or further break
+// the ESM build without changing its resolvable CJS entry point, and this
+// workaround should not silently start pointing at a different broken (or
+// fixed, but untested-here) build. Bump deliberately, re-verify this file's
+// createRequire path still resolves and examples/generate.ts still runs via
+// plain `node` (not just vitest), then update the pin.
 const require = createRequire(import.meta.url);
 const sodium = require('libsodium-wrappers') as typeof Sodium;
 

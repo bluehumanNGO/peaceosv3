@@ -75,17 +75,17 @@ describe('verify — negative cases (each MUST fail, per M1 requirements)', () =
     expect(report.verdict).toBe('problems_detected');
   });
 
-  it('fails the timestamp check when the proof is swapped for one targeting a different (stale) content_hash', async () => {
-    const stale = await buildValidTestPackage();
+  it('rejects a reused timestamp proof — a genuine .ots from a different package, which does not bind this content_hash (A3: this is not "backdating", see core/src/timestamp.ts)', async () => {
+    const other = await buildValidTestPackage();
     const fresh = await buildValidTestPackage();
 
-    await copyFile(join(stale.outDir, 'timestamps', 'manifest.ots'), join(fresh.outDir, 'timestamps', 'manifest.ots'));
+    await copyFile(join(other.outDir, 'timestamps', 'manifest.ots'), join(fresh.outDir, 'timestamps', 'manifest.ots'));
 
     const report = await verify(fresh.outDir, { transparencyDir: fresh.transparencyDir });
 
     const timestampCheck = checkFor(report, 'timestamp');
     expect(timestampCheck.status).toBe('fail');
-    expect(timestampCheck.message).toMatch(/does not belong to this package/i);
+    expect(timestampCheck.message).toMatch(/reused from a different package/i);
     expect(report.verdict).toBe('problems_detected');
   });
 

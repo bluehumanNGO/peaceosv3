@@ -39,7 +39,7 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0
       libsodium-wrappers:
-        specifier: ^0.7.15
+        specifier: 0.7.16
         version: 0.7.16
       opentimestamps:
         specifier: ^0.4.9

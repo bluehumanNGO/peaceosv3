@@ -14,6 +14,13 @@ describe('build + verify round trip', () => {
       expect(check.status, `${check.id}: ${check.message}`).toBe('ok');
     }
     expect(report.verdict).toBe('authentic');
+
+    // A1: the default (no --check-bitcoin) verdict rests on "bound", never
+    // silently on "anchored" — that label only ever appears after a real
+    // network confirmation the caller explicitly opted into.
+    const timestampCheck = report.checks.find((c) => c.id === 'timestamp');
+    expect(timestampCheck?.details?.level).toBe('bound');
+    expect(timestampCheck?.message).toMatch(/run with --check-bitcoin/i);
   });
 
   it('never reports the org checks as ok (fails closed to not_determined) when no transparency directory is given', async () => {

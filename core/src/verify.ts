@@ -5,7 +5,7 @@ import { MANIFEST_FILE } from './layout.js';
 import { verifyDetached } from './keys.js';
 import { resolveSafePath, UnsafePathError } from './paths.js';
 import { validateManifestSchema } from './schema.js';
-import { verifyTimestampProofOffline } from './timestamp.js';
+import { confirmBitcoinAnchor, verifyTimestampProofOffline } from './timestamp.js';
 import type { CheckId, CheckResult, VerifyReport } from './types.js';
 
 const ALL_CHECK_IDS: CheckId[] = ['integrity', 'field_signature', 'org_countersignature', 'org_identity', 'timestamp', 'package_id'];
@@ -13,6 +13,14 @@ const ALL_CHECK_IDS: CheckId[] = ['integrity', 'field_signature', 'org_countersi
 export interface VerifyOptions {
   /** Local checkout of the public organizational-key transparency repo. Without it, org_identity and org_countersignature report not_determined — never ok. */
   transparencyDir?: string;
+  /**
+   * Opt-in only (A2): an Esplora-compatible Bitcoin endpoint the CALLER
+   * supplies (their own node/explorer). When set, the timestamp check
+   * additionally queries this one source to upgrade "bound (offline)" to
+   * "anchored (chain-confirmed)". When unset (the default), the timestamp
+   * check never makes a network request — this is the sacred default.
+   */
+  checkBitcoinSource?: string;
 }
 
 function failClosedReport(packagePath: string, schemaErrors: string[], packageId: string | null = null): VerifyReport {
@@ -244,6 +252,7 @@ async function checkTimestamp(
   packageRoot: string,
   timestamps: Array<Record<string, unknown>> | undefined,
   contentHashHex: string,
+  checkBitcoinSource: string | undefined,
 ): Promise<CheckResult> {
   const proofRef = timestamps?.[0]?.proof_ref;
   if (typeof proofRef !== 'string') {
@@ -264,8 +273,16 @@ async function checkTimestamp(
     return { id: 'timestamp', status: 'fail', message: `Timestamp proof file not readable: ${(err as Error).message}` };
   }
 
-  const result = verifyTimestampProofOffline(contentHashHex, proofBytes);
-  return { id: 'timestamp', status: result.status, message: result.message, details: { attestations: result.attestations } };
+  const result = checkBitcoinSource
+    ? await confirmBitcoinAnchor(contentHashHex, proofBytes, checkBitcoinSource)
+    : verifyTimestampProofOffline(contentHashHex, proofBytes);
+
+  return {
+    id: 'timestamp',
+    status: result.status,
+    message: result.message,
+    details: { level: result.level, attestations: result.attestations },
+  };
 }
 
 export async function verify(packagePath: string, options: VerifyOptions = {}): Promise<VerifyReport> {
@@ -312,7 +329,12 @@ export async function verify(packagePath: string, options: VerifyOptions = {}): 
     orgIdentityCheck,
     orgPublicKey,
   );
-  const timestampCheck = await checkTimestamp(packagePath, manifest.timestamps as Array<Record<string, unknown>> | undefined, contentHashHex);
+  const timestampCheck = await checkTimestamp(
+    packagePath,
+    manifest.timestamps as Array<Record<string, unknown>> | undefined,
+    contentHashHex,
+    options.checkBitcoinSource,
+  );
 
   const checks: CheckResult[] = [integrityCheck, fieldSigCheck, orgCountersigCheck, orgIdentityCheck, timestampCheck, packageIdCheck];
   const verdict = checks.every((c) => c.status === 'ok') ? 'authentic' : 'problems_detected';
