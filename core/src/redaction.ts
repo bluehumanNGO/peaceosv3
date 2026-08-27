@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { canonicalizeJcs, sha256Hex } from './canonical.js';
 
@@ -27,5 +27,7 @@ export function generateRedactionSalt(): string {
  * caller-supplied salt (there is no "try without salt" mode by design).
  */
 export function verifyRedactionReveal(manifestCommitment: string, input: RedactionCommitmentInput): boolean {
-  return computeRedactionCommitment(input) === manifestCommitment;
+  const recomputed = Buffer.from(computeRedactionCommitment(input), 'hex');
+  const expected = Buffer.from(manifestCommitment, 'hex');
+  return recomputed.length === expected.length && timingSafeEqual(recomputed, expected);
 }
