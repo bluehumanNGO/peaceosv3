@@ -7,6 +7,6 @@ export interface CustodyEventPayload {
 }
 
 /** Per CRYPTO_CONTRACT.md §9: event_hash = SHA-256(JCS({ event, actor, at })), 32 raw bytes. */
-export function computeCustodyEventHash(payload: CustodyEventPayload): Buffer {
-  return sha256(canonicalizeJcs(payload));
+export async function computeCustodyEventHash(payload: CustodyEventPayload): Promise<Uint8Array> {
+  return await sha256(canonicalizeJcs(payload));
 }

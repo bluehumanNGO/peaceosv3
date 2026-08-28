@@ -7,6 +7,32 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
+    },
+    "./file-tree": {
+      "types": "./dist/file-tree.d.ts",
+      "default": "./dist/file-tree.js"
+    },
+    "./node-file-tree": {
+      "types": "./dist/node-file-tree.d.ts",
+      "default": "./dist/node-file-tree.js"
+    },
+    "./timestamp-node": {
+      "types": "./dist/timestamp-node.d.ts",
+      "default": "./dist/timestamp-node.js"
+    },
+    "./timestamp-offline": {
+      "types": "./dist/timestamp-offline.d.ts",
+      "default": "./dist/timestamp-offline.js"
+    }
+  },
   "files": [
     "dist"
   ],

@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 
 import { MANIFEST_SCHEMA_VERSION } from '@peaceos/spec';
 
+import { utf8ToBytes } from './bytes.js';
 import { buildSignedContent, canonicalizeJcs, computeContentHash, derivePackageId, sha256Hex } from './canonical.js';
 import { computeCustodyEventHash } from './custody.js';
 import {
@@ -20,7 +21,7 @@ import { signDetached } from './keys.js';
 import { resolveSafePath } from './paths.js';
 import { computeRedactionCommitment } from './redaction.js';
 import { validateManifestSchema } from './schema.js';
-import { createLocalPendingProof, createTimestampProof } from './timestamp.js';
+import { createLocalPendingProof, createTimestampProof } from './timestamp-node.js';
 import type { BuildInput, BuildResult } from './types.js';
 
 async function writeFileSafely(outDir: string, ref: string, data: Uint8Array): Promise<void> {
@@ -43,7 +44,7 @@ export async function build(input: BuildInput): Promise<BuildResult> {
         filename: asset.filename,
         media_type: asset.mediaType,
         size_bytes: sourceBytes.byteLength,
-        sha256: sha256Hex(sourceBytes),
+        sha256: await sha256Hex(sourceBytes),
       };
       if (asset.capturedAt) entry.captured_at = asset.capturedAt;
       if (asset.captureClaim) {
@@ -59,30 +60,30 @@ export async function build(input: BuildInput): Promise<BuildResult> {
   );
 
   const custodyEvents = input.custody ?? [];
-  const custodyEntries = custodyEvents.map((event, index) => {
+  const custodyEntries = await Promise.all(custodyEvents.map(async (event, index) => {
     const payload = { event: event.event, actor: event.actor, at: event.at };
-    const eventHash = computeCustodyEventHash(payload);
+    const eventHash = await computeCustodyEventHash(payload);
     return {
       entry: {
         event: event.event,
         actor: event.actor,
         at: event.at,
         actor_public_key_ref: actorPublicKeyRef(event.actor),
-        actor_public_key_sha256: sha256Hex(Buffer.from(event.actorPublicKey)),
+        actor_public_key_sha256: await sha256Hex(event.actorPublicKey),
         sig_ref: custodyEventSigRef(event.event, index + 1),
       },
       eventHash,
-      actorPublicKeyBytes: Buffer.from(event.actorPublicKey),
+      actorPublicKeyBytes: event.actorPublicKey,
       actorPrivateKey: event.actorPrivateKey,
     };
-  });
+  }));
 
   const redactionInputs = input.redactions ?? [];
-  const redactionEntries = redactionInputs.map((redaction) => ({
+  const redactionEntries = await Promise.all(redactionInputs.map(async (redaction) => ({
     field: redaction.field,
-    commitment: computeRedactionCommitment(redaction),
+    commitment: await computeRedactionCommitment(redaction),
     status: redaction.status ?? ('withheld' as const),
-  }));
+  })));
 
   const content: Record<string, unknown> = {
     vep_version: MANIFEST_SCHEMA_VERSION,
@@ -93,22 +94,22 @@ export async function build(input: BuildInput): Promise<BuildResult> {
   if (custodyEntries.length > 0) content.custody = custodyEntries.map((c) => c.entry);
   if (redactionEntries.length > 0) content.redactions = redactionEntries;
 
-  const { contentHash, contentHashHex } = computeContentHash(content);
+  const { contentHash, contentHashHex } = await computeContentHash(content);
   const packageId = derivePackageId(contentHashHex);
 
-  const fieldPublicKeyBytes = Buffer.from(input.fieldPublicKey);
+  const fieldPublicKeyBytes = input.fieldPublicKey;
   const signature = {
     alg: 'ed25519' as const,
     key_id: input.fieldKeyId,
     public_key_ref: fieldPublicKeyRef(input.fieldKeyId),
-    public_key_sha256: sha256Hex(fieldPublicKeyBytes),
+    public_key_sha256: await sha256Hex(fieldPublicKeyBytes),
     sig_ref: MANIFEST_SIGNATURE_FILE,
   };
   const fieldSigBytes = await signDetached(contentHash, input.fieldPrivateKey);
 
   const signedContent = buildSignedContent(content, signature);
   const signedContentJcs = canonicalizeJcs(signedContent);
-  const orgSigBytes = await signDetached(Buffer.from(signedContentJcs, 'utf8'), input.orgPrivateKey);
+  const orgSigBytes = await signDetached(utf8ToBytes(signedContentJcs), input.orgPrivateKey);
 
   const org = {
     org_id: input.orgId,
@@ -149,7 +150,7 @@ export async function build(input: BuildInput): Promise<BuildResult> {
     await writeFileSafely(input.outDir, custodyEvent.entry.sig_ref, eventSigBytes);
   }
 
-  await writeFileSafely(input.outDir, MANIFEST_FILE, Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
+  await writeFileSafely(input.outDir, MANIFEST_FILE, utf8ToBytes(JSON.stringify(manifest, null, 2)));
 
   return { outDir: input.outDir, packageId, contentHashHex };
 }

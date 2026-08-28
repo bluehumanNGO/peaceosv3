@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { verify } from '../src/verify.js';
+import { verifyDirectory as verify } from '../src/node-file-tree.js';
 import { buildFullTestPackage, buildValidTestPackage, readManifest, writeManifest } from './helpers.js';
 
 function checkFor(report: Awaited<ReturnType<typeof verify>>, id: string) {

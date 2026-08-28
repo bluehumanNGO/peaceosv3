@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { generateEd25519Keypair } from '../src/keys.js';
 import type { VerifyReport } from '../src/types.js';
-import { verify } from '../src/verify.js';
+import { verifyDirectory as verify } from '../src/node-file-tree.js';
 import { buildValidTestPackage, flipLastByte, readManifest, writeManifest } from './helpers.js';
 
 function checkFor(report: VerifyReport, id: string) {

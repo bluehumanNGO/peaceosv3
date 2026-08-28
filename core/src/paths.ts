@@ -1,11 +1,8 @@
 import { resolve, sep } from 'node:path';
 
-export class UnsafePathError extends Error {
-  constructor(public readonly ref: string) {
-    super(`Unsafe path reference (rejected before any file was opened): "${ref}"`);
-    this.name = 'UnsafePathError';
-  }
-}
+import { assertSafePackageRef, UnsafePathError } from './refs.js';
+
+export { UnsafePathError };
 
 /**
  * Resolves a manifest-supplied relative ref (public_key_ref, sig_ref,
@@ -18,25 +15,12 @@ export class UnsafePathError extends Error {
  * before the referenced file is opened.
  */
 export function resolveSafePath(packageRoot: string, ref: string): string {
-  if (typeof ref !== 'string' || ref.length === 0) {
-    throw new UnsafePathError(String(ref));
-  }
-  if (ref.includes('\0') || ref.includes('\\')) {
-    throw new UnsafePathError(ref);
-  }
-  if (ref.startsWith('/') || /^[a-zA-Z]:/.test(ref)) {
-    throw new UnsafePathError(ref);
-  }
-
-  const segments = ref.split('/');
-  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-    throw new UnsafePathError(ref);
-  }
+  const safeRef = assertSafePackageRef(ref);
 
   const root = resolve(packageRoot);
-  const resolved = resolve(root, ref);
+  const resolved = resolve(root, safeRef);
   if (resolved !== root && !resolved.startsWith(root + sep)) {
-    throw new UnsafePathError(ref);
+    throw new UnsafePathError(safeRef);
   }
   return resolved;
 }

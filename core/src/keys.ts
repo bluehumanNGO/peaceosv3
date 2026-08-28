@@ -1,26 +1,12 @@
-import { createRequire } from 'node:module';
-
 import type * as Sodium from 'libsodium-wrappers';
 
-// libsodium-wrappers' published ESM build (dist/modules-esm/*.mjs) is
-// broken: it imports a sibling "libsodium.mjs" file that isn't actually
-// included in the npm package, so a plain `import sodium from
-// 'libsodium-wrappers'` fails at runtime under Node's real ESM resolver
-// (confirmed while wiring examples/generate.ts — not just a test-only
-// quirk). Its CJS build (dist/modules/libsodium-wrappers.js) works
-// correctly, so it's loaded via createRequire, matching the same pattern
-// used for ajv-formats in schema.ts.
-//
-// Pinned to exactly 0.7.16 (package.json: "libsodium-wrappers": "0.7.16",
-// no caret) rather than left on a ^0.7.15 range, specifically because of
-// this bug: an upstream patch release could fix, change, or further break
-// the ESM build without changing its resolvable CJS entry point, and this
-// workaround should not silently start pointing at a different broken (or
-// fixed, but untested-here) build. Bump deliberately, re-verify this file's
-// createRequire path still resolves and examples/generate.ts still runs via
-// plain `node` (not just vitest), then update the pin.
-const require = createRequire(import.meta.url);
-const sodium = require('libsodium-wrappers') as typeof Sodium;
+// The package's ESM export points at a missing sibling file in 0.7.16. This
+// published wrapper entry works in Node and browsers and still exposes
+// sodium.ready; keep this import free of Node-only module loading.
+// @ts-expect-error The package does not publish declarations for this subpath.
+import * as sodiumModule from '../node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js';
+
+const sodium = ('default' in sodiumModule ? sodiumModule.default : sodiumModule) as typeof Sodium;
 
 export interface Ed25519Keypair {
   publicKey: Uint8Array;
@@ -30,7 +16,9 @@ export interface Ed25519Keypair {
 let readyPromise: Promise<typeof sodium> | null = null;
 
 function loadSodium(): Promise<typeof sodium> {
-  readyPromise ??= sodium.ready.then(() => sodium);
+  if (!readyPromise) {
+    readyPromise = sodium.ready.then(() => sodium);
+  }
   return readyPromise;
 }
 

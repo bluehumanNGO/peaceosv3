@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
-
 import canonicalize from 'canonicalize';
 import { PACKAGE_ID_PREFIX } from '@peaceos/spec';
+
+import { bytesToHex, utf8ToBytes } from './bytes.js';
 
 export function canonicalizeJcs(value: unknown): string {
   const jcs = canonicalize(value);
@@ -11,24 +11,26 @@ export function canonicalizeJcs(value: unknown): string {
   return jcs;
 }
 
-export function sha256(input: string | Uint8Array): Buffer {
-  return createHash('sha256').update(typeof input === 'string' ? Buffer.from(input, 'utf8') : input).digest();
+export async function sha256(input: string | Uint8Array): Promise<Uint8Array> {
+  const bytes = typeof input === 'string' ? utf8ToBytes(input) : input;
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes.slice().buffer);
+  return new Uint8Array(digest);
 }
 
-export function sha256Hex(input: string | Uint8Array): string {
-  return sha256(input).toString('hex');
+export async function sha256Hex(input: string | Uint8Array): Promise<string> {
+  return bytesToHex(await sha256(input));
 }
 
 export interface ContentHashResult {
-  contentHash: Buffer;
+  contentHash: Uint8Array;
   contentHashHex: string;
   jcs: string;
 }
 
-export function computeContentHash(content: Record<string, unknown>): ContentHashResult {
+export async function computeContentHash(content: Record<string, unknown>): Promise<ContentHashResult> {
   const jcs = canonicalizeJcs(content);
-  const contentHash = sha256(jcs);
-  return { contentHash, contentHashHex: contentHash.toString('hex'), jcs };
+  const contentHash = await sha256(jcs);
+  return { contentHash, contentHashHex: bytesToHex(contentHash), jcs };
 }
 
 export function derivePackageId(contentHashHex: string): string {

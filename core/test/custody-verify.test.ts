@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { computeCustodyEventHash } from '../src/custody.js';
 import { generateEd25519Keypair, signDetached } from '../src/keys.js';
-import { verify } from '../src/verify.js';
+import { verifyDirectory as verify } from '../src/node-file-tree.js';
 import { buildFullTestPackage, buildValidTestPackage, flipLastByte, readManifest, writeManifest } from './helpers.js';
 
 function checkFor(report: Awaited<ReturnType<typeof verify>>, id: string) {
@@ -52,7 +52,7 @@ describe('custody chain — negative (B4, each MUST fail)', () => {
     // properly with the real actor key so THIS test isolates the ordering
     // failure from the (separately tested) signature-validity failure.
     const earlierAt = '2020-01-01T00:00:00.000Z';
-    const newEventHash = computeCustodyEventHash({ event: 'imported', actor: coordActor, at: earlierAt });
+    const newEventHash = await computeCustodyEventHash({ event: 'imported', actor: coordActor, at: earlierAt });
     const newSig = await signDetached(newEventHash, coordKeypair.privateKey);
     await writeFile(join(outDir, String(custody[1]!.sig_ref)), newSig);
     custody[1]!.at = earlierAt;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { verify } from '../src/verify.js';
+import { verifyDirectory as verify } from '../src/node-file-tree.js';
 import { buildValidTestPackage } from './helpers.js';
 
 describe('build + verify round trip', () => {

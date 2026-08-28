@@ -25,7 +25,7 @@ export async function reveal(packagePath: string, input: RevealInput): Promise<R
     };
   }
 
-  const matched = verifyRedactionReveal(entry.commitment, input);
+  const matched = await verifyRedactionReveal(entry.commitment, input);
   return {
     field: input.field,
     matched,

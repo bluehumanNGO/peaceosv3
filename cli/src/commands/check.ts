@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 
-import { verify } from '@peaceos/core';
+import { readFileTreeFromDirectory } from '@peaceos/core/node-file-tree';
+import { verifyPackageFiles } from '@peaceos/core/verify';
 
 import { formatReportHuman } from '../report.js';
 
@@ -23,13 +24,37 @@ export async function runCheck(argv: string[]): Promise<number> {
     return 1;
   }
 
-  // --check-bitcoin is opt-in only: absent, `verify` never makes a network
+  // --check-bitcoin is opt-in only: absent, Verify never makes a network
   // request (see VerifyOptions.checkBitcoinSource in @peaceos/core). The
   // endpoint queried is always exactly and only what the caller passes here
   // — never a project-chosen default.
-  const report = await verify(packagePath, {
-    transparencyDir: values.transparency,
+  let packageFiles;
+  try {
+    packageFiles = await readFileTreeFromDirectory(packagePath);
+  } catch (err) {
+    packageFiles = new Map();
+    const report = await verifyPackageFiles(packageFiles, {
+      packagePath,
+      readError: `manifest.json not readable: ${(err as Error).message}`,
+    });
+    console.log(values.json ? JSON.stringify(report, null, 2) : formatReportHuman(report));
+    return 1;
+  }
+
+  let transparencyFiles;
+  try {
+    transparencyFiles = values.transparency ? await readFileTreeFromDirectory(values.transparency) : undefined;
+  } catch {
+    transparencyFiles = new Map();
+  }
+
+  const report = await verifyPackageFiles(packageFiles, {
+    packagePath,
+    transparencyFiles,
     checkBitcoinSource: values['check-bitcoin'],
+    confirmBitcoinAnchor: values['check-bitcoin']
+      ? (await import('@peaceos/core/timestamp-node')).confirmBitcoinAnchor
+      : undefined,
   });
 
   if (values.json) {

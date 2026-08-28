@@ -4,30 +4,30 @@ import { computeRedactionCommitment, generateRedactionSalt, verifyRedactionRevea
 import expected from '../../spec/test/fixtures/crypto-contract/expected-vectors.json' with { type: 'json' };
 
 describe('computeRedactionCommitment matches the locked spec/ vector', () => {
-  it('reproduces the locked commitment hex', () => {
+  it('reproduces the locked commitment hex', async () => {
     const { salt_base64, field, value, commitment_hex } = expected.redaction_commitment;
-    expect(computeRedactionCommitment({ saltBase64: salt_base64, field, value })).toBe(commitment_hex);
+    expect(await computeRedactionCommitment({ saltBase64: salt_base64, field, value })).toBe(commitment_hex);
   });
 
-  it('changes when the field changes (domain separation)', () => {
+  it('changes when the field changes (domain separation)', async () => {
     const { salt_base64, value, commitment_hex } = expected.redaction_commitment;
-    expect(computeRedactionCommitment({ saltBase64: salt_base64, field: 'other_field', value })).not.toBe(commitment_hex);
+    expect(await computeRedactionCommitment({ saltBase64: salt_base64, field: 'other_field', value })).not.toBe(commitment_hex);
   });
 });
 
 describe('verifyRedactionReveal (constant-time digest comparison)', () => {
   const { salt_base64, field, value, commitment_hex } = expected.redaction_commitment;
 
-  it('returns true (YES) for the exact committed salt/field/value', () => {
-    expect(verifyRedactionReveal(commitment_hex, { saltBase64: salt_base64, field, value })).toBe(true);
+  it('returns true (YES) for the exact committed salt/field/value', async () => {
+    expect(await verifyRedactionReveal(commitment_hex, { saltBase64: salt_base64, field, value })).toBe(true);
   });
 
-  it('returns false (NO) for a wrong value', () => {
-    expect(verifyRedactionReveal(commitment_hex, { saltBase64: salt_base64, field, value: 'Someone Else' })).toBe(false);
+  it('returns false (NO) for a wrong value', async () => {
+    expect(await verifyRedactionReveal(commitment_hex, { saltBase64: salt_base64, field, value: 'Someone Else' })).toBe(false);
   });
 
-  it('returns false, not throw, for a malformed/wrong-length manifest commitment', () => {
-    expect(verifyRedactionReveal('not-a-valid-hash', { saltBase64: salt_base64, field, value })).toBe(false);
+  it('returns false, not throw, for a malformed/wrong-length manifest commitment', async () => {
+    expect(await verifyRedactionReveal('not-a-valid-hash', { saltBase64: salt_base64, field, value })).toBe(false);
   });
 });
 

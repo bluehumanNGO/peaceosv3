@@ -1,12 +1,13 @@
-import { readFile } from 'node:fs/promises';
-
+import { bytesToUtf8, utf8ToBytes } from './bytes.js';
 import { buildSignedContent, canonicalizeJcs, computeContentHash, derivePackageId, sha256Hex } from './canonical.js';
 import { computeCustodyEventHash } from './custody.js';
+import type { FileTree } from './file-tree.js';
 import { MANIFEST_FILE } from './layout.js';
 import { verifyDetached } from './keys.js';
-import { resolveSafePath, UnsafePathError } from './paths.js';
+import { assertSafePackageRef, UnsafePathError } from './refs.js';
 import { validateManifestSchema } from './schema.js';
-import { confirmBitcoinAnchor, verifyTimestampProofOffline } from './timestamp.js';
+import { verifyTimestampProofOffline } from './timestamp-offline.js';
+import type { ConfirmBitcoinAnchor } from './timestamp-types.js';
 import type { CheckId, CheckResult, VerifyReport } from './types.js';
 
 const ALL_CHECK_IDS: CheckId[] = [
@@ -20,17 +21,20 @@ const ALL_CHECK_IDS: CheckId[] = [
   'redactions',
 ];
 
-export interface VerifyOptions {
-  /** Local checkout of the public organizational-key transparency repo. Without it, org_identity and org_countersignature report not_determined — never ok. */
-  transparencyDir?: string;
+export interface VerifyFileTreeOptions {
+  packagePath?: string;
+  packageFiles?: FileTree;
+  transparencyFiles?: FileTree;
   /**
    * Opt-in only (A2): an Esplora-compatible Bitcoin endpoint the CALLER
    * supplies (their own node/explorer). When set, the timestamp check
    * additionally queries this one source to upgrade "bound (offline)" to
    * "anchored (chain-confirmed)". When unset (the default), the timestamp
-   * check never makes a network request — this is the sacred default.
+   * check never makes a network request - this is the sacred default.
    */
   checkBitcoinSource?: string;
+  confirmBitcoinAnchor?: ConfirmBitcoinAnchor;
+  readError?: string;
 }
 
 function failClosedReport(packagePath: string, schemaErrors: string[], packageId: string | null = null): VerifyReport {
@@ -40,6 +44,19 @@ function failClosedReport(packagePath: string, schemaErrors: string[], packageId
     message: 'Manifest failed schema validation; this check could not be attempted.',
   }));
   return { packagePath, packageId, schemaValid: false, schemaErrors, checks, verdict: 'problems_detected' };
+}
+
+function readFileBytes(files: FileTree, ref: string): Uint8Array {
+  const safeRef = assertSafePackageRef(ref);
+  const bytes = files.get(safeRef);
+  if (!bytes) {
+    throw new Error(`File not found in file tree: "${safeRef}"`);
+  }
+  return bytes;
+}
+
+function fileExists(files: FileTree, ref: string): boolean {
+  return files.has(assertSafePackageRef(ref));
 }
 
 function checkPackageId(manifest: Record<string, unknown>, contentHashHex: string): CheckResult {
@@ -54,27 +71,24 @@ function checkPackageId(manifest: Record<string, unknown>, contentHashHex: strin
   };
 }
 
-async function checkIntegrity(packageRoot: string, assets: Array<Record<string, unknown>>): Promise<CheckResult> {
+async function checkIntegrity(packageFiles: FileTree, assets: Array<Record<string, unknown>>): Promise<CheckResult> {
   const perAsset: Array<{ filename: unknown; ok: boolean; reason?: string }> = [];
 
   for (const asset of assets) {
     const filename = asset.filename;
     const withheld = asset.withheld === true;
     try {
-      const path = resolveSafePath(packageRoot, `assets/${String(filename)}`);
-      let bytes: Buffer;
+      let bytes: Uint8Array;
       try {
-        bytes = await readFile(path);
+        bytes = readFileBytes(packageFiles, `assets/${String(filename)}`);
       } catch (err) {
         if (withheld) {
-          // M2 §10: an absent file for a withheld asset is expected, not a
-          // defect — reported by the redactions check, not counted here.
           continue;
         }
         perAsset.push({ filename, ok: false, reason: `file not readable: ${(err as Error).message}` });
         continue;
       }
-      const actualSha256 = sha256Hex(bytes);
+      const actualSha256 = await sha256Hex(bytes);
       if (actualSha256 === asset.sha256) {
         perAsset.push({ filename, ok: true });
       } else {
@@ -98,29 +112,27 @@ async function checkIntegrity(packageRoot: string, assets: Array<Record<string, 
 }
 
 async function checkFieldSignature(
-  packageRoot: string,
+  packageFiles: FileTree,
   signature: Record<string, unknown>,
-  contentHash: Buffer,
+  contentHash: Uint8Array,
 ): Promise<CheckResult> {
-  let pubKeyPath: string;
-  let sigPath: string;
+  let pubKeyRef: string;
+  let sigRef: string;
   try {
-    pubKeyPath = resolveSafePath(packageRoot, String(signature.public_key_ref));
-    sigPath = resolveSafePath(packageRoot, String(signature.sig_ref));
+    pubKeyRef = assertSafePackageRef(String(signature.public_key_ref));
+    sigRef = assertSafePackageRef(String(signature.sig_ref));
   } catch (err) {
     return { id: 'field_signature', status: 'fail', message: `Unsafe path in signature refs: ${(err as Error).message}` };
   }
 
-  let pubKeyBytes: Buffer;
+  let pubKeyBytes: Uint8Array;
   try {
-    pubKeyBytes = await readFile(pubKeyPath);
+    pubKeyBytes = readFileBytes(packageFiles, pubKeyRef);
   } catch (err) {
     return { id: 'field_signature', status: 'fail', message: `Field public key file not readable: ${(err as Error).message}` };
   }
 
-  // Mandatory before any signature math: an unattested key must never be
-  // trusted, even if it would happen to verify a signature correctly.
-  const actualKeySha256 = sha256Hex(pubKeyBytes);
+  const actualKeySha256 = await sha256Hex(pubKeyBytes);
   if (actualKeySha256 !== signature.public_key_sha256) {
     return {
       id: 'field_signature',
@@ -132,9 +144,9 @@ async function checkFieldSignature(
     };
   }
 
-  let sigBytes: Buffer;
+  let sigBytes: Uint8Array;
   try {
-    sigBytes = await readFile(sigPath);
+    sigBytes = readFileBytes(packageFiles, sigRef);
   } catch (err) {
     return { id: 'field_signature', status: 'fail', message: `Field signature file not readable: ${(err as Error).message}` };
   }
@@ -151,11 +163,11 @@ async function checkFieldSignature(
 
 interface OrgIdentityOutcome {
   result: CheckResult;
-  orgPublicKey: Buffer | null;
+  orgPublicKey: Uint8Array | null;
 }
 
-async function checkOrgIdentity(org: Record<string, unknown>, transparencyDir: string | undefined): Promise<OrgIdentityOutcome> {
-  if (!transparencyDir) {
+function checkOrgIdentity(org: Record<string, unknown>, transparencyFiles: FileTree | undefined): OrgIdentityOutcome {
+  if (!transparencyFiles) {
     return {
       orgPublicKey: null,
       result: {
@@ -171,9 +183,9 @@ async function checkOrgIdentity(org: Record<string, unknown>, transparencyDir: s
   const orgId = String(org.org_id);
   const keyId = String(org.key_id);
 
-  let keyPath: string;
+  let keyRef: string;
   try {
-    keyPath = resolveSafePath(transparencyDir, `keys/${orgId}/${keyId}.pub`);
+    keyRef = assertSafePackageRef(`keys/${orgId}/${keyId}.pub`);
   } catch (err) {
     return {
       orgPublicKey: null,
@@ -181,9 +193,9 @@ async function checkOrgIdentity(org: Record<string, unknown>, transparencyDir: s
     };
   }
 
-  let keyBytes: Buffer;
+  let keyBytes: Uint8Array;
   try {
-    keyBytes = await readFile(keyPath);
+    keyBytes = readFileBytes(transparencyFiles, keyRef);
   } catch {
     return {
       orgPublicKey: null,
@@ -220,12 +232,12 @@ async function checkOrgIdentity(org: Record<string, unknown>, transparencyDir: s
 }
 
 async function checkOrgCountersignature(
-  packageRoot: string,
+  packageFiles: FileTree,
   org: Record<string, unknown>,
   content: Record<string, unknown>,
   signature: Record<string, unknown>,
   orgIdentity: CheckResult,
-  orgPublicKey: Buffer | null,
+  orgPublicKey: Uint8Array | null,
 ): Promise<CheckResult> {
   if (orgIdentity.status === 'not_determined') {
     return {
@@ -242,22 +254,22 @@ async function checkOrgCountersignature(
     };
   }
 
-  let sigPath: string;
+  let sigRef: string;
   try {
-    sigPath = resolveSafePath(packageRoot, String(org.countersig_ref));
+    sigRef = assertSafePackageRef(String(org.countersig_ref));
   } catch (err) {
     return { id: 'org_countersignature', status: 'fail', message: `Unsafe path: ${(err as Error).message}` };
   }
 
-  let sigBytes: Buffer;
+  let sigBytes: Uint8Array;
   try {
-    sigBytes = await readFile(sigPath);
+    sigBytes = readFileBytes(packageFiles, sigRef);
   } catch (err) {
     return { id: 'org_countersignature', status: 'fail', message: `Org countersignature file not readable: ${(err as Error).message}` };
   }
 
   const signedContentJcs = canonicalizeJcs(buildSignedContent(content, signature));
-  const ok = await verifyDetached(sigBytes, Buffer.from(signedContentJcs, 'utf8'), orgPublicKey);
+  const ok = await verifyDetached(sigBytes, utf8ToBytes(signedContentJcs), orgPublicKey);
   return {
     id: 'org_countersignature',
     status: ok ? 'ok' : 'fail',
@@ -268,33 +280,42 @@ async function checkOrgCountersignature(
 }
 
 async function checkTimestamp(
-  packageRoot: string,
+  packageFiles: FileTree,
   timestamps: Array<Record<string, unknown>> | undefined,
   contentHashHex: string,
   checkBitcoinSource: string | undefined,
+  confirmBitcoinAnchor: ConfirmBitcoinAnchor | undefined,
 ): Promise<CheckResult> {
   const proofRef = timestamps?.[0]?.proof_ref;
   if (typeof proofRef !== 'string') {
     return { id: 'timestamp', status: 'fail', message: 'No timestamp proof_ref present in the manifest.' };
   }
 
-  let proofPath: string;
+  let safeProofRef: string;
   try {
-    proofPath = resolveSafePath(packageRoot, proofRef);
+    safeProofRef = assertSafePackageRef(proofRef);
   } catch (err) {
     return { id: 'timestamp', status: 'fail', message: `Unsafe path: ${(err as Error).message}` };
   }
 
-  let proofBytes: Buffer;
+  let proofBytes: Uint8Array;
   try {
-    proofBytes = await readFile(proofPath);
+    proofBytes = readFileBytes(packageFiles, safeProofRef);
   } catch (err) {
     return { id: 'timestamp', status: 'fail', message: `Timestamp proof file not readable: ${(err as Error).message}` };
   }
 
   const result = checkBitcoinSource
-    ? await confirmBitcoinAnchor(contentHashHex, proofBytes, checkBitcoinSource)
-    : verifyTimestampProofOffline(contentHashHex, proofBytes);
+    ? await (confirmBitcoinAnchor?.(contentHashHex, proofBytes, checkBitcoinSource) ??
+        Promise.resolve({
+          status: 'not_determined' as const,
+          level: 'bound' as const,
+          message:
+            'Bitcoin chain confirmation was requested, but no Node-only confirmer was provided. ' +
+            'The browser/default verifier did not attempt network confirmation.',
+          attestations: [],
+        }))
+    : await verifyTimestampProofOffline(contentHashHex, proofBytes);
 
   return {
     id: 'timestamp',
@@ -312,7 +333,7 @@ interface CustodyEventReport {
   reason?: string;
 }
 
-async function checkCustody(packageRoot: string, custody: Array<Record<string, unknown>> | undefined): Promise<CheckResult> {
+async function checkCustody(packageFiles: FileTree, custody: Array<Record<string, unknown>> | undefined): Promise<CheckResult> {
   if (!custody || custody.length === 0) {
     return { id: 'custody', status: 'ok', message: 'No custody events present.' };
   }
@@ -339,33 +360,33 @@ async function checkCustody(packageRoot: string, custody: Array<Record<string, u
       previousAtMs = atMs;
     }
 
-    let pubKeyPath: string | null = null;
-    let sigPath: string | null = null;
+    let pubKeyRef: string | null = null;
+    let sigRef: string | null = null;
     try {
-      pubKeyPath = resolveSafePath(packageRoot, String(event.actor_public_key_ref));
-      sigPath = resolveSafePath(packageRoot, String(event.sig_ref));
+      pubKeyRef = assertSafePackageRef(String(event.actor_public_key_ref));
+      sigRef = assertSafePackageRef(String(event.sig_ref));
     } catch (err) {
       issues.push(`unsafe path: ${(err as Error).message}`);
     }
 
-    if (pubKeyPath && sigPath) {
-      let pubKeyBytes: Buffer | null = null;
+    if (pubKeyRef && sigRef) {
+      let pubKeyBytes: Uint8Array | null = null;
       try {
-        pubKeyBytes = await readFile(pubKeyPath);
+        pubKeyBytes = readFileBytes(packageFiles, pubKeyRef);
       } catch (err) {
         issues.push(`actor public key not readable: ${(err as Error).message}`);
       }
 
       if (pubKeyBytes) {
-        const actualKeySha256 = sha256Hex(pubKeyBytes);
+        const actualKeySha256 = await sha256Hex(pubKeyBytes);
         if (actualKeySha256 !== event.actor_public_key_sha256) {
           issues.push(
             `actor public key hashes to ${actualKeySha256}, not actor_public_key_sha256 (${String(event.actor_public_key_sha256)})`,
           );
         } else {
           try {
-            const sigBytes = await readFile(sigPath);
-            const eventHash = computeCustodyEventHash({ event: String(event.event), actor: String(event.actor), at });
+            const sigBytes = readFileBytes(packageFiles, sigRef);
+            const eventHash = await computeCustodyEventHash({ event: String(event.event), actor: String(event.actor), at });
             const ok = await verifyDetached(sigBytes, eventHash, pubKeyBytes);
             if (!ok) issues.push('signature does not verify against event_hash');
           } catch (err) {
@@ -390,7 +411,7 @@ async function checkCustody(packageRoot: string, custody: Array<Record<string, u
 }
 
 async function checkRedactions(
-  packageRoot: string,
+  packageFiles: FileTree,
   redactions: Array<Record<string, unknown>> | undefined,
   assets: Array<Record<string, unknown>>,
 ): Promise<CheckResult> {
@@ -410,9 +431,7 @@ async function checkRedactions(
     withheldAssets.map(async (asset) => {
       let present = false;
       try {
-        const path = resolveSafePath(packageRoot, `assets/${String(asset.filename)}`);
-        await readFile(path);
-        present = true;
+        present = fileExists(packageFiles, `assets/${String(asset.filename)}`);
       } catch {
         present = false;
       }
@@ -441,17 +460,15 @@ async function checkRedactions(
   };
 }
 
-export async function verify(packagePath: string, options: VerifyOptions = {}): Promise<VerifyReport> {
-  let manifestPath: string;
-  try {
-    manifestPath = resolveSafePath(packagePath, MANIFEST_FILE);
-  } catch (err) {
-    return failClosedReport(packagePath, [`Unsafe package path: ${(err as Error).message}`]);
+export async function verifyPackageFiles(packageFiles: FileTree, options: VerifyFileTreeOptions = {}): Promise<VerifyReport> {
+  const packagePath = options.packagePath ?? '(in-memory package)';
+  if (options.readError) {
+    return failClosedReport(packagePath, [options.readError]);
   }
 
   let manifestRaw: string;
   try {
-    manifestRaw = await readFile(manifestPath, 'utf8');
+    manifestRaw = bytesToUtf8(readFileBytes(packageFiles, MANIFEST_FILE));
   } catch (err) {
     return failClosedReport(packagePath, [`manifest.json not readable: ${(err as Error).message}`]);
   }
@@ -471,14 +488,14 @@ export async function verify(packagePath: string, options: VerifyOptions = {}): 
 
   const { package_id: _packageId, signature, org, ...content } = manifest;
   void _packageId;
-  const { contentHash, contentHashHex } = computeContentHash(content);
+  const { contentHash, contentHashHex } = await computeContentHash(content);
 
   const packageIdCheck = checkPackageId(manifest, contentHashHex);
-  const integrityCheck = await checkIntegrity(packagePath, manifest.assets as Array<Record<string, unknown>>);
-  const fieldSigCheck = await checkFieldSignature(packagePath, signature as Record<string, unknown>, contentHash);
-  const { result: orgIdentityCheck, orgPublicKey } = await checkOrgIdentity(org as Record<string, unknown>, options.transparencyDir);
+  const integrityCheck = await checkIntegrity(packageFiles, manifest.assets as Array<Record<string, unknown>>);
+  const fieldSigCheck = await checkFieldSignature(packageFiles, signature as Record<string, unknown>, contentHash);
+  const { result: orgIdentityCheck, orgPublicKey } = checkOrgIdentity(org as Record<string, unknown>, options.transparencyFiles);
   const orgCountersigCheck = await checkOrgCountersignature(
-    packagePath,
+    packageFiles,
     org as Record<string, unknown>,
     content,
     signature as Record<string, unknown>,
@@ -486,14 +503,15 @@ export async function verify(packagePath: string, options: VerifyOptions = {}): 
     orgPublicKey,
   );
   const timestampCheck = await checkTimestamp(
-    packagePath,
+    packageFiles,
     manifest.timestamps as Array<Record<string, unknown>> | undefined,
     contentHashHex,
     options.checkBitcoinSource,
+    options.confirmBitcoinAnchor,
   );
-  const custodyCheck = await checkCustody(packagePath, manifest.custody as Array<Record<string, unknown>> | undefined);
+  const custodyCheck = await checkCustody(packageFiles, manifest.custody as Array<Record<string, unknown>> | undefined);
   const redactionsCheck = await checkRedactions(
-    packagePath,
+    packageFiles,
     manifest.redactions as Array<Record<string, unknown>> | undefined,
     manifest.assets as Array<Record<string, unknown>>,
   );

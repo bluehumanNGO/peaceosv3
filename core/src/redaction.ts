@@ -1,6 +1,5 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-
 import { canonicalizeJcs, sha256Hex } from './canonical.js';
+import { bytesToBase64, constantTimeEqual, hexToBytes, randomBytes } from './bytes.js';
 
 export interface RedactionCommitmentInput {
   saltBase64: string;
@@ -9,13 +8,13 @@ export interface RedactionCommitmentInput {
 }
 
 /** Per CRYPTO_CONTRACT.md §6: SHA-256(JCS({ salt, field, value })), hex-encoded. */
-export function computeRedactionCommitment({ saltBase64, field, value }: RedactionCommitmentInput): string {
+export async function computeRedactionCommitment({ saltBase64, field, value }: RedactionCommitmentInput): Promise<string> {
   const jcs = canonicalizeJcs({ salt: saltBase64, field, value });
-  return sha256Hex(jcs);
+  return await sha256Hex(jcs);
 }
 
 export function generateRedactionSalt(): string {
-  return randomBytes(32).toString('base64');
+  return bytesToBase64(randomBytes(32));
 }
 
 /**
@@ -26,8 +25,8 @@ export function generateRedactionSalt(): string {
  * doesn't. Callers are responsible for never invoking this without a real,
  * caller-supplied salt (there is no "try without salt" mode by design).
  */
-export function verifyRedactionReveal(manifestCommitment: string, input: RedactionCommitmentInput): boolean {
-  const recomputed = Buffer.from(computeRedactionCommitment(input), 'hex');
-  const expected = Buffer.from(manifestCommitment, 'hex');
-  return recomputed.length === expected.length && timingSafeEqual(recomputed, expected);
+export async function verifyRedactionReveal(manifestCommitment: string, input: RedactionCommitmentInput): Promise<boolean> {
+  const recomputed = hexToBytes(await computeRedactionCommitment(input));
+  const expected = hexToBytes(manifestCommitment);
+  return !!recomputed && !!expected && constantTimeEqual(recomputed, expected);
 }

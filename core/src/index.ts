@@ -1,8 +1,11 @@
 export { build } from './build.js';
-export { verify } from './verify.js';
-export type { VerifyOptions } from './verify.js';
+export { verifyPackageFiles } from './verify.js';
+export type { VerifyFileTreeOptions } from './verify.js';
+export { readFileTreeFromDirectory, verifyDirectory, verifyDirectory as verify } from './node-file-tree.js';
+export type { VerifyOptions } from './node-file-tree.js';
 export { reveal } from './reveal.js';
 export { UnsafePathError, resolveSafePath } from './paths.js';
+export type { FileTree } from './file-tree.js';
 export { generateEd25519Keypair, signDetached, verifyDetached } from './keys.js';
 export { computeRedactionCommitment, generateRedactionSalt, verifyRedactionReveal } from './redaction.js';
 export { computeCustodyEventHash } from './custody.js';
