@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent, InputHTMLAttributes } from 'react';
 import { verifyPackageFiles } from '@peaceos/core/verify';
 import type { FileTree } from '@peaceos/core/file-tree';
@@ -40,21 +40,28 @@ import {
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 
+import { getCheckCopy, getStatusDescription, getStatusLabel, getVerdictCopy } from './copy.js';
 import {
   buildFileTreeFromFiles,
   collectDroppedDirectoryFiles,
   type BrowserDirectoryFile,
 } from './fileTree.js';
-import { getCheckCopy, getStatusDescription, getStatusLabel, getVerdictCopy } from './copy.js';
+import { getTranslation, isLanguage, type Language } from './i18n.js';
+import { LanguageSelector } from './languageSelector.js';
 
 const LOGO_SRC = '/images/Verify_POS_logo.png';
+const LANGUAGE_STORAGE_KEY = 'peaceos.verify.language';
 
 type DirectoryKind = 'package' | 'transparency';
 type StatusTone = 'success' | 'error' | 'warning' | 'info';
+type AppError = { type: 'local'; key: 'selectEvidenceFirst' } | { type: 'raw'; message: string } | null;
 
 interface DirectoryPickerProps {
   title: string;
   description: string;
+  buttonLabel: string;
+  selectAriaPrefix: string;
+  language: Language;
   tree: FileTree | null;
   onFiles: (files: BrowserDirectoryFile[]) => Promise<void>;
 }
@@ -86,9 +93,23 @@ async function withNetworkBlocked<T>(action: () => Promise<T>): Promise<{ result
   }
 }
 
-function fileCountLabel(tree: FileTree | null) {
-  if (!tree) return 'Sin seleccionar';
-  return `${tree.size} ${tree.size === 1 ? 'archivo cargado' : 'archivos cargados'}`;
+function getInitialLanguage(): Language {
+  if (typeof window === 'undefined') return 'es';
+  const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  return isLanguage(storedLanguage) ? storedLanguage : 'es';
+}
+
+function getDocumentLanguage(language: Language): string {
+  if (language === 'zh') return 'zh-CN';
+  return language;
+}
+
+function fileCountLabel(tree: FileTree | null, language: Language) {
+  const t = getTranslation(language);
+
+  if (!tree) return t.noSelection;
+  if (language === 'zh') return `${tree.size}${t.loadedPlural}`;
+  return `${tree.size} ${tree.size === 1 ? t.loadedSingular : t.loadedPlural}`;
 }
 
 function statusTone(check: CheckResult): StatusTone {
@@ -104,11 +125,21 @@ function statusIcon(check: CheckResult) {
   return <HelpOutlineIcon fontSize="small" />;
 }
 
-function statusMeaning(check: CheckResult) {
-  return getStatusDescription(check);
+function resolveErrorMessage(error: AppError, language: Language) {
+  if (!error) return null;
+  if (error.type === 'raw') return error.message;
+  return getTranslation(language)[error.key];
 }
 
-function DirectoryPicker({ title, description, tree, onFiles }: DirectoryPickerProps) {
+function DirectoryPicker({
+  title,
+  description,
+  buttonLabel,
+  selectAriaPrefix,
+  language,
+  tree,
+  onFiles,
+}: DirectoryPickerProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const directoryInputProps = {
     webkitdirectory: '',
@@ -164,7 +195,7 @@ function DirectoryPicker({ title, description, tree, onFiles }: DirectoryPickerP
                 color={tree ? 'success.main' : 'text.secondary'}
                 sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}
               >
-                {fileCountLabel(tree)}
+                {fileCountLabel(tree, language)}
               </Typography>
             </Stack>
             <Typography variant="body2" color="text.secondary">
@@ -177,7 +208,7 @@ function DirectoryPicker({ title, description, tree, onFiles }: DirectoryPickerP
           {...directoryInputProps}
           ref={inputRef}
           hidden
-          aria-label={`Seleccionar ${title}`}
+          aria-label={`${selectAriaPrefix} ${title}`}
           type="file"
           multiple
           onChange={handleInputChange}
@@ -189,7 +220,7 @@ function DirectoryPicker({ title, description, tree, onFiles }: DirectoryPickerP
           onClick={() => inputRef.current?.click()}
           sx={{ justifyContent: 'flex-start' }}
         >
-          Seleccionar carpeta
+          {buttonLabel}
         </Button>
       </Stack>
     </Box>
@@ -200,19 +231,24 @@ function InputRail({
   packageTree,
   transparencyTree,
   loading,
+  language,
   onLoadDirectory,
   onVerify,
 }: {
   packageTree: FileTree | null;
   transparencyTree: FileTree | null;
   loading: boolean;
+  language: Language;
   onLoadDirectory: (kind: DirectoryKind, files: BrowserDirectoryFile[]) => Promise<void>;
   onVerify: () => Promise<void>;
 }) {
+  const t = getTranslation(language);
+
   return (
     <Box
       component="aside"
       sx={{
+        gridArea: 'input',
         p: 1.5,
         borderRight: { lg: 1 },
         borderBottom: { xs: 1, lg: 0 },
@@ -222,28 +258,34 @@ function InputRail({
       <Stack spacing={1.25}>
         <Box>
           <Typography variant="overline" color="text.secondary">
-            Entrada local
+            {t.inputLocal}
           </Typography>
-          <Typography variant="h2">Archivos necesarios</Typography>
+          <Typography variant="h2">{t.requiredFiles}</Typography>
         </Box>
 
         <DirectoryPicker
-          title="Evidencia a verificar (carpeta .vep)"
-          description="La carpeta que contiene la evidencia y sus sellos."
+          title={t.packageTitle}
+          description={t.packageDescription}
+          buttonLabel={t.selectFolder}
+          selectAriaPrefix={t.selectFolderAriaPrefix}
+          language={language}
           tree={packageTree}
           onFiles={(files) => onLoadDirectory('package', files)}
         />
 
         <DirectoryPicker
-          title="Organizaciones de confianza"
-          description="Una copia local del registro público que permite comprobar quién firma la evidencia. Selecciona la carpeta completa, no un archivo suelto."
+          title={t.transparencyTitle}
+          description={t.transparencyDescription}
+          buttonLabel={t.selectFolder}
+          selectAriaPrefix={t.selectFolderAriaPrefix}
+          language={language}
           tree={transparencyTree}
           onFiles={(files) => onLoadDirectory('transparency', files)}
         />
 
         {!transparencyTree && (
           <Alert severity="warning" sx={{ py: 0.5 }}>
-            Falta la carpeta de organizaciones de confianza. Sin ella no se puede comprobar quién firma la evidencia, y el resultado no será concluyente.
+            {t.missingTransparencyWarning}
           </Alert>
         )}
 
@@ -255,46 +297,52 @@ function InputRail({
           onClick={onVerify}
           disabled={loading || !packageTree}
         >
-          Verificar evidencia
+          {t.verifyEvidence}
         </Button>
       </Stack>
     </Box>
   );
 }
 
-function TrustLine() {
+function TrustLine({ language }: { language: Language }) {
+  const t = getTranslation(language);
+
   return (
     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pt: 1 }}>
-      Verificado en tu propio navegador. Nada se sube a ningún servidor.
+      {t.verifiedInBrowser}
     </Typography>
   );
 }
 
-function InitialState() {
+function InitialState({ language }: { language: Language }) {
+  const t = getTranslation(language);
+
   return (
     <Box sx={{ p: 2 }}>
       <Stack spacing={1}>
         <Typography variant="overline" color="text.secondary">
-          Resultado
+          {t.result}
         </Typography>
-        <Typography variant="h1">Comprueba si una evidencia es auténtica</Typography>
+        <Typography variant="h1">{t.initialTitle}</Typography>
         <Typography color="text.secondary" sx={{ maxWidth: 760 }}>
-          Carga la carpeta de la evidencia y la de organizaciones de confianza. Todo se comprueba aquí mismo, en tu navegador; nada se sube a ningún sitio.
+          {t.initialText}
         </Typography>
       </Stack>
     </Box>
   );
 }
 
-function LoadingState() {
+function LoadingState({ language }: { language: Language }) {
+  const t = getTranslation(language);
+
   return (
     <Box sx={{ p: 2 }}>
       <LinearProgress sx={{ mb: 1.5 }} />
       <Stack spacing={1}>
         <Typography variant="overline" color="text.secondary">
-          Verificando
+          {t.verifying}
         </Typography>
-        <Typography variant="h1">Procesando arbol en memoria</Typography>
+        <Typography variant="h1">{t.processingTree}</Typography>
         {[0, 1, 2, 3, 4, 5, 6, 7].map((row) => (
           <Stack key={row} direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
             <Skeleton variant="rounded" width={108} height={22} />
@@ -310,14 +358,17 @@ function VerdictBand({
   report,
   packageId,
   copied,
+  language,
   onCopy,
 }: {
   report: VerifyReport;
   packageId: string;
   copied: boolean;
+  language: Language;
   onCopy: () => Promise<void>;
 }) {
-  const verdict = getVerdictCopy(report);
+  const t = getTranslation(language);
+  const verdict = getVerdictCopy(report, language);
 
   return (
     <Box
@@ -350,7 +401,7 @@ function VerdictBand({
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">
-                Veredicto
+                {t.verdict}
               </Typography>
               <Typography variant="h1" color={`${verdict.tone}.main`}>
                 {verdict.title}
@@ -361,13 +412,13 @@ function VerdictBand({
             </Box>
           </Stack>
           <Button variant="outlined" startIcon={<ContentCopyOutlinedIcon />} onClick={onCopy}>
-            {copied ? 'Copiado' : 'Copiar huella'}
+            {copied ? t.copied : t.copyFingerprint}
           </Button>
         </Stack>
 
         <Box>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-            Huella del paquete
+            {t.packageFingerprint}
           </Typography>
           <Typography
             component="p"
@@ -386,18 +437,19 @@ function VerdictBand({
   );
 }
 
-function ChecksTable({ checks }: { checks: CheckResult[] }) {
+function ChecksTable({ checks, language }: { checks: CheckResult[]; language: Language }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const t = getTranslation(language);
 
   return (
-    <Table size="small" aria-label="Comprobaciones de verificacion">
+    <Table size="small" aria-label={t.tableAriaLabel}>
       <TableHead>
         <TableRow>
-          <TableCell sx={{ width: 172 }}>Estado</TableCell>
-          <TableCell sx={{ width: 210 }}>Comprobación</TableCell>
-          <TableCell>Mensaje</TableCell>
+          <TableCell sx={{ width: 172 }}>{t.status}</TableCell>
+          <TableCell sx={{ width: 210 }}>{t.check}</TableCell>
+          <TableCell>{t.message}</TableCell>
           <TableCell align="right" sx={{ width: 48 }}>
-            Detalle técnico
+            {t.technicalDetail}
           </TableCell>
         </TableRow>
       </TableHead>
@@ -405,7 +457,7 @@ function ChecksTable({ checks }: { checks: CheckResult[] }) {
         {checks.map((check) => {
           const tone = statusTone(check);
           const isExpanded = Boolean(expanded[check.id]);
-          const copy = getCheckCopy(check);
+          const copy = getCheckCopy(check, language);
 
           return (
             <Fragment key={check.id}>
@@ -414,13 +466,13 @@ function ChecksTable({ checks }: { checks: CheckResult[] }) {
                   <Stack spacing={0.25} sx={{ alignItems: 'flex-start' }}>
                     <Chip
                       icon={statusIcon(check)}
-                      label={getStatusLabel(check)}
+                      label={getStatusLabel(check, language)}
                       color={tone}
                       variant={check.status === 'ok' ? 'filled' : 'outlined'}
                       sx={{ height: 22, '& .MuiChip-label': { px: 0.75 } }}
                     />
                     <Typography variant="caption" color="text.secondary">
-                      {statusMeaning(check)}
+                      {getStatusDescription(check, language)}
                     </Typography>
                   </Stack>
                 </TableCell>
@@ -428,7 +480,7 @@ function ChecksTable({ checks }: { checks: CheckResult[] }) {
                   <Typography variant="subtitle1">{copy.name}</Typography>
                   {check.id === 'timestamp' && (
                     <Typography variant="caption" color="info.main" sx={{ fontWeight: 500 }}>
-                      Sin confirmar
+                      {t.pendingConfirmation}
                     </Typography>
                   )}
                 </TableCell>
@@ -441,15 +493,15 @@ function ChecksTable({ checks }: { checks: CheckResult[] }) {
                       {copy.what}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-                      Por qué importa: {copy.why}
+                      {t.whyItMatters}: {copy.why}
                     </Typography>
                   </Stack>
                 </TableCell>
                 <TableCell align="right">
-                  <Tooltip title={isExpanded ? 'Ocultar detalle técnico' : 'Ver detalle técnico'}>
+                  <Tooltip title={isExpanded ? t.hideTechnicalDetail : t.showTechnicalDetail}>
                     <IconButton
                       size="small"
-                      aria-label={`${isExpanded ? 'Ocultar' : 'Mostrar'} detalle técnico de ${copy.name}`}
+                      aria-label={`${isExpanded ? t.hideTechnicalDetail : t.showTechnicalDetail}: ${copy.name}`}
                       onClick={() => setExpanded((current) => ({ ...current, [check.id]: !isExpanded }))}
                     >
                       {isExpanded ? <KeyboardArrowDownIcon fontSize="small" /> : <KeyboardArrowRightIcon fontSize="small" />}
@@ -462,7 +514,7 @@ function ChecksTable({ checks }: { checks: CheckResult[] }) {
                   <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                     <Box sx={{ px: 2, py: 1, bgcolor: 'background.default', borderTop: 1, borderColor: 'divider' }}>
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-                        Detalle técnico
+                        {t.technicalDetail}
                       </Typography>
                       <Typography
                         component="pre"
@@ -489,9 +541,10 @@ function ChecksTable({ checks }: { checks: CheckResult[] }) {
   );
 }
 
-function ReportView({ report }: { report: VerifyReport }) {
+function ReportView({ report, language }: { report: VerifyReport; language: Language }) {
   const [copied, setCopied] = useState(false);
-  const packageId = report.packageId ?? '(unknown - manifest failed schema validation)';
+  const t = getTranslation(language);
+  const packageId = report.packageId ?? t.unknownPackageId;
 
   async function copyPackageId() {
     await navigator.clipboard.writeText(packageId);
@@ -501,22 +554,22 @@ function ReportView({ report }: { report: VerifyReport }) {
 
   return (
     <Box>
-      <VerdictBand report={report} packageId={packageId} copied={copied} onCopy={copyPackageId} />
+      <VerdictBand report={report} packageId={packageId} copied={copied} language={language} onCopy={copyPackageId} />
 
       <Box sx={{ px: 1.5, py: 1 }}>
         <Alert severity="info" icon={<CloudOffOutlinedIcon />} sx={{ py: 0.35 }}>
-          Fecha y hora: hay una prueba ligada a este paquete. La confirmación definitiva en la red pública se comprueba aparte y aquí todavía no se ha confirmado.
+          {t.timestampAlert}
         </Alert>
       </Box>
 
       <Divider />
 
       <Box sx={{ overflowX: 'auto' }}>
-        <ChecksTable checks={report.checks} />
+        <ChecksTable checks={report.checks} language={language} />
       </Box>
 
       <Box sx={{ px: 1.5, pb: 1 }}>
-        <TrustLine />
+        <TrustLine language={language} />
       </Box>
     </Box>
   );
@@ -526,24 +579,32 @@ export function App() {
   const [packageTree, setPackageTree] = useState<FileTree | null>(null);
   const [transparencyTree, setTransparencyTree] = useState<FileTree | null>(null);
   const [report, setReport] = useState<VerifyReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError>(null);
   const [loading, setLoading] = useState(false);
+  const [language, setLanguage] = useState<Language>(getInitialLanguage);
+  const t = getTranslation(language);
+
+  useEffect(() => {
+    document.documentElement.lang = getDocumentLanguage(language);
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  }, [language]);
 
   async function loadDirectory(kind: DirectoryKind, files: BrowserDirectoryFile[]) {
     setError(null);
     setReport(null);
+
     try {
       const tree = await buildFileTreeFromFiles(files);
       if (kind === 'package') setPackageTree(tree);
       else setTransparencyTree(tree);
     } catch (err) {
-      setError((err as Error).message);
+      setError({ type: 'raw', message: (err as Error).message });
     }
   }
 
   async function verifyInBrowser() {
     if (!packageTree) {
-      setError('Selecciona primero la carpeta de evidencia.');
+      setError({ type: 'local', key: 'selectEvidenceFirst' });
       return;
     }
 
@@ -560,7 +621,7 @@ export function App() {
       );
       setReport(result);
     } catch (err) {
-      setError((err as Error).message);
+      setError({ type: 'raw', message: (err as Error).message });
     } finally {
       setLoading(false);
     }
@@ -578,18 +639,14 @@ export function App() {
     >
       <AppBar position="static" sx={{ flex: '0 0 auto' }}>
         <Toolbar variant="dense" sx={{ minHeight: 48, gap: 1.25 }}>
-          <Box
-            component="img"
-            src={LOGO_SRC}
-            alt="PeaceOS"
-            sx={{ width: 30, height: 30, objectFit: 'contain' }}
-          />
+          <Box component="img" src={LOGO_SRC} alt="PeaceOS" sx={{ width: 30, height: 30, objectFit: 'contain' }} />
           <Typography variant="subtitle1" sx={{ color: 'common.white', flex: 1, minWidth: 0 }}>
-            PeaceOS Verify
+            {t.appTitle}
           </Typography>
           <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.76)', whiteSpace: 'nowrap' }}>
-            Local · sin red
+            {t.localOffline}
           </Typography>
+          <LanguageSelector language={language} onChange={setLanguage} />
         </Toolbar>
       </AppBar>
 
@@ -616,6 +673,10 @@ export function App() {
             <Box
               sx={{
                 display: 'grid',
+                gridTemplateAreas: {
+                  xs: '"input" "results"',
+                  lg: '"input results"',
+                },
                 gridTemplateColumns: { xs: '1fr', lg: '308px minmax(0, 1fr)' },
                 height: { lg: '100%' },
                 minHeight: 0,
@@ -625,14 +686,16 @@ export function App() {
                 packageTree={packageTree}
                 transparencyTree={transparencyTree}
                 loading={loading}
+                language={language}
                 onLoadDirectory={loadDirectory}
                 onVerify={verifyInBrowser}
               />
 
               <Box
                 component="section"
-                aria-label="Resultados de verificacion"
+                aria-label={t.reportAriaLabel}
                 sx={{
+                  gridArea: 'results',
                   minWidth: 0,
                   minHeight: 0,
                   height: { lg: '100%' },
@@ -642,15 +705,15 @@ export function App() {
               >
                 {error && (
                   <Box sx={{ p: 1.5, pb: 0 }}>
-                    <Alert severity="error">{error}</Alert>
+                    <Alert severity="error">{resolveErrorMessage(error, language)}</Alert>
                   </Box>
                 )}
                 {loading ? (
-                  <LoadingState />
+                  <LoadingState language={language} />
                 ) : report ? (
-                  <ReportView report={report} />
+                  <ReportView report={report} language={language} />
                 ) : (
-                  <InitialState />
+                  <InitialState language={language} />
                 )}
               </Box>
             </Box>
